@@ -62,14 +62,6 @@ export class LocalFilesResolver extends Resolver {
 
         const targetConfig = readAndParseJSONFile(targetConfigPath);
 
-        const source = process.env.SHORE__SOURCE as SourceType;
-        if (!source) {
-            throw new Error(`Env variable \`SHORE__SOURCE\` is not set. 
-            Did you forget to configure it?
-            
-            Possible values are: \`HUBSPOT\`, \`LAGROWTHMACHINE\``)
-        }
-
         const destination = process.env.SHORE__DESTINATION as DestinationType;
         if (!destination) {
             throw new Error(`❌ Env variable \`SHORE__DESTINATION\` is not set.
@@ -80,7 +72,6 @@ export class LocalFilesResolver extends Resolver {
 
         if (command === `READ`) {
 
-            // TODO: Remove this from the resolver
             if (destination === `GOOGLE_BIGQUERY`) {
                 const googleCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
                 if (!googleCredentials) {
@@ -98,7 +89,6 @@ export class LocalFilesResolver extends Resolver {
 
             return Promise.resolve({
                 command,
-                source,
                 destination,
                 config,
                 targetConfig,
@@ -108,7 +98,6 @@ export class LocalFilesResolver extends Resolver {
         } else {
             return Promise.resolve({
                 command,
-                source,
                 destination,
                 config,
                 targetConfig

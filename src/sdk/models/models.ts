@@ -40,7 +40,6 @@ export type DestinationType = `GOOGLE_BIGQUERY` |
 
 export interface ShoreConfig {
     command: ShoreCommand,
-    source: SourceType,
     destination: DestinationType,
     config: any,
     targetConfig: any,

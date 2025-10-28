@@ -1,5 +1,5 @@
 import fs from 'fs-extra';
-import { uniqueId } from 'lodash';
+import uniqueId from 'lodash/uniqueId.js';
 import { StreamId } from '../catalog';
 import { TempFile } from './models';
 

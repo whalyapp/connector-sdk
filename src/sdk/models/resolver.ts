@@ -1,6 +1,6 @@
 import winston from "winston";
 import { CatalogFile } from "./catalog"
-import { ShoreCommand, ShoreConfig, SourceType } from "./models";
+import { StateHolder } from "./models";
 import { TargetSchemaHook } from "./target/targetHook";
 import { type ErrorType } from "./error";
 
@@ -8,8 +8,7 @@ export abstract class Resolver {
     constructor() {}
     abstract checkIfCanSync(): Promise<boolean>;
     abstract markSyncStarted(): Promise<void>;
-    abstract startVPNIfNeeded(): Promise<void>;
-    abstract getConfig(command: ShoreCommand): Promise<ShoreConfig>;
+    abstract getState(): Promise<StateHolder>;
     abstract writeCatalog(catalog: CatalogFile): Promise<void>;
     abstract writeState(state: string): Promise<void>;
     abstract markSyncFailed(): Promise<void>;

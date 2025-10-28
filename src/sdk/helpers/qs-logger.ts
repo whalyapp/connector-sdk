@@ -1,4 +1,4 @@
-import * as _ from "lodash";
+import isPlainObject from "lodash/isPlainObject.js";
 
 // Truncate potentially large query params for logging efficiency
 const MAX_QS_KEYS = 10;
@@ -27,7 +27,7 @@ function truncateQueryParams(value: any, depth: number = 0): any {
         return items;
     }
 
-    if (_.isPlainObject(value)) {
+    if (isPlainObject(value)) {
         const keys = Object.keys(value);
         const result: Record<string, any> = {};
         for (const key of keys.slice(0, MAX_QS_KEYS)) {

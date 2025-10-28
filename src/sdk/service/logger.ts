@@ -7,24 +7,10 @@ const transports = {
     console: new winston.transports.Console({
         stderrLevels: [],
         level: 'info'
-    }),
-    http: new winston.transports.Http({
-        "host": "logs-app.default",
-        "ssl": false,
-        "path": `/private/v1/logs/orgs/${process.env.WHALY_CONFIG_RESOLVER__ORG_ID}/executions/${process.env.WHALY_CONFIG_RESOLVER__EXECUTION_IDENTIFIER}/logs`,
-        "batch": true,
-        "batchInterval": BATCH_INTERVAL_MS,
-        "batchCount": 10
     })
 };
 
 const getTransports = (): winston.transport[] => {
-    if (process.env.ENABLE_LOGS_HTTP_EXPORT === "1") {
-        return [
-            transports.console,
-            transports.http
-        ]
-    }
     return [
         transports.console
     ]

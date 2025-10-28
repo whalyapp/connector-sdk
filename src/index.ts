@@ -6,6 +6,7 @@ export * from "./sdk/service/memory";
 export * from "./sdk/service/error";
 export * from "./sdk/service/exit";
 export * from "./sdk/service/relationship";
+export * from "./sdk/service/resolver";
 
 export * from "./sdk/models/models";
 export * from "./sdk/models/catalog";
@@ -32,3 +33,6 @@ export * from "./sdk/models/target/schema";
 export * from "./sdk/models/target/target";
 export * from "./sdk/models/target/targetHook";
 export * from "./sdk/models/target/temporaryFile";
+
+export * from "./targets/bigquery/main";
+export * from "./targets/bigquery/models/config";

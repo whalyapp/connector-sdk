@@ -6,14 +6,13 @@ import { findRelatedRelationships } from "../../service/relationship";
 import { loadJson } from "../../utils";
 import { StreamId } from "../catalog";
 import { RecordMessage, ReplicationMethodMessage, SchemaMessage, StateMessage } from "../messages";
-import { MetadataEntry } from "../metadata";
 import { ReplicationMethod } from "../models";
 import { extractStateForStream, finalizeStateProgressMarkers, incrementStreamState, InputTapState, StateService } from "../state";
 import { ITarget } from "../target/target";
-import * as _ from "lodash";
+import cloneDeep from "lodash/cloneDeep.js";
 import { StreamRelationship } from "../relationship";
 import { Schema } from "../schema";
-import { Promise as BPromise } from "bluebird";
+import Bluebird from "bluebird";
 import { DEFAULT_MAX_CONCURRENT_STREAMS } from "./tap";
 import { CounterMetric, EXECUTION_TIME_METRIC_NAME, getCounterMetrics, MetricConfiguration, ROWS_SYNCED_METRIC_NAME } from "../../service/metric";
 import { format } from "util";
@@ -25,16 +24,12 @@ import { format } from "util";
  * C: Type of the tap configuration
  * P: For children Streams, this is the type of the parent
  */
-export abstract class StreamV2<O = any, C = any, P = undefined> {
+export abstract class Stream<O = any, C = any, P = undefined> {
 
     // Runtime values, can't be overriden
-    _config: C;
-    _tapName: string = "default";
-    _tapState: InputTapState;
-    _target: ITarget;
-    // Contains the root metadata entry of the catalog stream configuration
-    // contains some end user schema configuration
-    rootMetadataEntry: MetadataEntry | undefined;
+    config: C;
+    tapState: InputTapState;
+    target: ITarget;
 
     // Compile time values, can be overriden
     // Replication method that can be forced in the stream implemenation. Will prevail over any user/catalog choice
@@ -52,7 +47,7 @@ export abstract class StreamV2<O = any, C = any, P = undefined> {
 
     relationships: StreamRelationship[] = []
 
-    children: StreamV2<any, any, O | O[]>[] = [];
+    children: Stream<any, any, O | O[]>[] = [];
     // If true, it means that the records in this stream are sorted by replicationKey.
     // If false, then the records are coming in an unsorted manner.
     isSorted: boolean = false;
@@ -67,16 +62,14 @@ export abstract class StreamV2<O = any, C = any, P = undefined> {
     executionTimeMetricsConf: MetricConfiguration
 
     constructor(
-        tapName: string,
         config: C,
         state: InputTapState,
         target: ITarget,
         childConcurrency: number = DEFAULT_MAX_CONCURRENT_STREAMS
     ) {
-        this._tapName = tapName;
-        this._config = config;
-        this._tapState = _.cloneDeep(state);
-        this._target = target;
+        this.config = config;
+        this.tapState = cloneDeep(state);
+        this.target = target;
         this.childConcurrency = childConcurrency;
 
         // Default metric configuration
@@ -90,9 +83,7 @@ export abstract class StreamV2<O = any, C = any, P = undefined> {
         }
     }
 
-    setRootMetadataEntry = (rootMetadataEntry: MetadataEntry) => {
-        this.rootMetadataEntry = rootMetadataEntry;
-    }
+    // No root metadata: replication config is derived from stream defaults only
 
     /**
      * Sync this stream
@@ -137,7 +128,7 @@ export abstract class StreamV2<O = any, C = any, P = undefined> {
 
         await this._flush();
 
-        await BPromise.map(this.children, child => {
+        await Bluebird.map(this.children, child => {
             return child.flush();
         }, { concurrency: 3 });
     }
@@ -149,7 +140,7 @@ export abstract class StreamV2<O = any, C = any, P = undefined> {
      */
     _writeStateMessage = (): Promise<void> => {
         const message = new StateMessage(StateService.getInstance().get());
-        return this._target.state(message);
+        return this.target.state(message);
     }
 
     /**
@@ -159,10 +150,10 @@ export abstract class StreamV2<O = any, C = any, P = undefined> {
         const method = this.configuredReplicationConfig().replicationMethod;
         const message = new ReplicationMethodMessage(this.streamId, method);
 
-        await BPromise.map(this.children, async c => {
+        await Bluebird.map(this.children, async c => {
             return c._writeReplicationMethodMessage()
         }, { concurrency: 3 })
-        await this._target.replicationMethod(message);
+        await this.target.replicationMethod(message);
     }
 
     /**
@@ -186,12 +177,12 @@ export abstract class StreamV2<O = any, C = any, P = undefined> {
                     ...(this.description ? { description: this.description } : {}),
                     ...(schema.propertiesMetadata ? { propertiesMetadata: schema.propertiesMetadata } : {})
                 })
-                await this._target.schema(message);
+                await this.target.schema(message);
             }
         }
 
         if (skipChildrenSchema !== true) {
-            await BPromise.map(this.children, async (child) => {
+            await Bluebird.map(this.children, async (child) => {
                 await child._writeSchemaMessage();
             }, { concurrency: 3 });
         }
@@ -285,9 +276,9 @@ export abstract class StreamV2<O = any, C = any, P = undefined> {
      **/
     getStartingTimestamp(): moment.Moment {
         const streamIdToReadFrom = this.useStateFromStreamId ? this.useStateFromStreamId : this.streamId;
-        const state = extractStateForStream(this._tapState, streamIdToReadFrom);
+        const state = extractStateForStream(this.tapState, streamIdToReadFrom);
 
-        const startDate = (this._config as any).start_date as string | undefined;
+        const startDate = (this.config as any).start_date as string | undefined;
         const replicationConfig = this.configuredReplicationConfig();
 
         logger.debug(`${this.streamId}: state.replicationKeyValue: ${state.replicationKeyValue}, 
@@ -362,19 +353,10 @@ export abstract class StreamV2<O = any, C = any, P = undefined> {
         replicationMethod: ReplicationMethod,
         replicationKey: string | undefined
     } => {
-
-        const defaultReplicationMethod = this.defaultReplicationConfig();
-
-        if (defaultReplicationMethod.isForced) {
-            return {
-                replicationMethod: defaultReplicationMethod.replicationMethod,
-                replicationKey: defaultReplicationMethod.replicationKey
-            };
-        }
-
+        const defaults = this.defaultReplicationConfig();
         return {
-            replicationMethod: this.rootMetadataEntry?.["replication-method"] || defaultReplicationMethod.replicationMethod,
-            replicationKey: this.rootMetadataEntry?.["replication-key"] || defaultReplicationMethod.replicationKey
+            replicationMethod: defaults.replicationMethod,
+            replicationKey: defaults.replicationKey
         }
     }
 
@@ -416,10 +398,10 @@ export abstract class StreamV2<O = any, C = any, P = undefined> {
             )
 
             if (!this.isSilent) {
-                await this._target.record(recordMessage);
+                await this.target.record(recordMessage);
             }
 
-            await BPromise.map(this.children, async (child) => {
+            await Bluebird.map(this.children, async (child) => {
                 await child.asyncInit(row);
                 return child._syncRecords(row);
             },
@@ -467,7 +449,7 @@ export abstract class StreamV2<O = any, C = any, P = undefined> {
     getSchema(): Promise<Schema | undefined> {
         logger.debug(`stream: ${this.streamId} - getSchema() is called`)
         if (this.schemaPath) {
-            const schema = loadJson(`schemas/${this._tapName}/${this.schemaPath}`)
+            const schema = loadJson(`schemas/${this.schemaPath}`)
             return Promise.resolve({ jsonSchema: schema });
         } else {
             if (this.isSilent) {

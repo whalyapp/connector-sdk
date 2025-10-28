@@ -1,7 +1,7 @@
 import { gracefulExit } from "./exit";
 import { logger } from "./logger";
 import { loadResolver } from "./resolver"
-import { type ErrorType } from "../models/error.js";
+import { ErrorType } from "../models/error";
 
 export const haltAndCatchFire = async (
     errorType: ErrorType,

@@ -16,7 +16,7 @@ import { StreamId } from "../catalog";
 import { StreamWarehouseSyncService } from "./dbSync";
 import { Semaphore } from "async-mutex";
 import { ReplicationMethod } from "../models";
-import { Promise as BPromise } from "bluebird";
+import Bluebird from "bluebird";
 
 const semaphore = new Semaphore(1);
 
@@ -373,7 +373,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
                 }
             }
 
-            await BPromise.map(this.schemaHooks, async (hook) => {
+            await Bluebird.map(this.schemaHooks, async (hook) => {
                 const input: TargetSchemaHookInput = {
                     databaseName,
                     schemaName,
@@ -475,7 +475,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
     ) => {
 
         try {
-            await BPromise.map(streamsToUpload, async (streamId) => {
+            await Bluebird.map(streamsToUpload, async (streamId) => {
                 logger.info(`📤 Upload stream: ${streamId} to Warehouse`)
                 const streamState = this.streams[streamId];
                 if (streamState) {

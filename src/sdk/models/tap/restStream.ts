@@ -3,32 +3,32 @@ import { Authenticator } from "./authenticator";
 import { HTTPHeaders, HTTPMethod, URLParams } from "../http";
 import * as qs from 'qs';
 import { logger } from "../../service/logger";
-import { StreamV2 } from "./stream";
+import { Stream } from "./stream";
 import { InputTapState } from "../state";
 import { ITarget } from "../target/target";
 import { getAxiosInstance } from "../../service/network";
 import { DEFAULT_MAX_CONCURRENT_STREAMS } from "./tap";
 import { API_CALLS_METRIC_NAME, CounterMetric, getCounterMetrics, MetricConfiguration } from "../../service/metric";
 import { getTruncatedParamsForLog } from "../../helpers/qs-logger";
-import * as _ from "lodash";
+import cloneDeep from "lodash/cloneDeep.js";
+import isEqual from "lodash/isEqual.js";
 
 /**
  * R: Type of the API result
  * NPT: Type of the "nextPageToken"
  */
-export abstract class RESTStreamV2<R, O, NPT, C, P = undefined>
-    extends StreamV2<O, C, P> {
+export abstract class RESTStream<R, O, NPT, C, P = undefined>
+    extends Stream<O, C, P> {
 
     axiosInstance: AxiosInstance | undefined;
 
     constructor(
-        tapName: string,
         config: C,
         state: InputTapState,
         target: ITarget,
         childConcurrency: number = DEFAULT_MAX_CONCURRENT_STREAMS
     ) {
-        super(tapName, config, state, target, childConcurrency);
+        super(config, state, target, childConcurrency);
         this.apiCallsMetricsConf = {
             isEnabled: () => !this.isSilent,
             getStreamIds: () => [this.streamId]
@@ -57,7 +57,7 @@ export abstract class RESTStreamV2<R, O, NPT, C, P = undefined>
 
         const params = {
             ...this.getNextUrlParams(nextPageToken, parent),
-            ...(await authenticator?.getAuthQS(this._config))
+            ...(await authenticator?.getAuthQS(this.config))
         }
 
         const requestBody = this.getRequestBodyForNextCall(nextPageToken, parent)
@@ -67,7 +67,7 @@ export abstract class RESTStreamV2<R, O, NPT, C, P = undefined>
         }
 
         if (authenticator) {
-            const authHeaders = await authenticator.getAuthHeaders(this._config)
+            const authHeaders = await authenticator.getAuthHeaders(this.config)
             headers = {
                 ...headers,
                 ...authHeaders
@@ -160,10 +160,10 @@ export abstract class RESTStreamV2<R, O, NPT, C, P = undefined>
                 yield row
             }
 
-            const previousToken = _.cloneDeep(nextPageToken);
+            const previousToken = cloneDeep(nextPageToken);
             nextPageToken = this.getNextPageToken(resp, previousToken);
 
-            if (nextPageToken && _.isEqual(nextPageToken, previousToken)) {
+            if (nextPageToken && isEqual(nextPageToken, previousToken)) {
                 throw new Error(
                     `${this.streamId} - Loop detected in pagination. "
                     Pagination token: \`${JSON.stringify(nextPageToken)}\` is identical to prior token \`${JSON.stringify(previousToken)}\`.`

@@ -1,6 +1,6 @@
 import { CatalogFile } from "../../sdk/models/catalog";
 import { logger } from "../../sdk/service/logger";
-import { DestinationType, ShoreCommand, ShoreConfig, SourceType } from "../../sdk/models/models";
+import { StateHolder } from "../../sdk/models/models";
 import { Resolver } from "../../sdk/models/resolver";
 import { readAndParseJSONFile, writeFile } from "./services/files";
 import { LocalSchemaHook } from "./hook/schemaHook";
@@ -10,18 +10,10 @@ import { TargetSchemaHook } from "../../sdk/models/target/targetHook";
 
 const { combine, prettyPrint, timestamp, errors, splat } = winston.format;
 
-const configPath = './config.json'
-const targetConfigPath = './target-config.json'
-const catalogPath = './catalog.json'
 const statePath = './state.json'
 const metricsPath = './metrics.json'
 
 export class LocalFilesResolver extends Resolver {
-    startVPNIfNeeded(): Promise<void> {
-        // We can't start the VPN locally from here as it requires root access
-        // See the doc in atlantis to boot it locally on your dev station
-        return Promise.resolve();
-    }
 
     checkIfCanSync(): Promise<boolean> {
         return Promise.resolve(true);
@@ -53,60 +45,17 @@ export class LocalFilesResolver extends Resolver {
         super();
     }
 
-    getConfig(
-        command: ShoreCommand
-    ): Promise<ShoreConfig> {
+    getState(
+    ): Promise<StateHolder> {
         logger.info(`📁 Using the LOCAL resolver`)
-
-        const config = readAndParseJSONFile(configPath);
-
-        const targetConfig = readAndParseJSONFile(targetConfigPath);
-
-        const destination = process.env.SHORE__DESTINATION as DestinationType;
-        if (!destination) {
-            throw new Error(`❌ Env variable \`SHORE__DESTINATION\` is not set.
-            Did you forget to configure it?
-            
-            Possible values are: \`GOOGLE_BIGQUERY\`, \`SNOWFLAKE\``)
-        }
-
-        if (command === `READ`) {
-
-            if (destination === `GOOGLE_BIGQUERY`) {
-                const googleCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-                if (!googleCredentials) {
-                    throw new Error(`Env variable \`GOOGLE_APPLICATION_CREDENTIALS\` is not set. 
-                Did you forget to configure it?
-
-                This variable should link to a file containing the proper Google Service Account credentials.
-                `)
-                }
-            }
-
-            const catalog = readAndParseJSONFile(catalogPath);
-
-            const state = readAndParseJSONFile(statePath);
-
-            return Promise.resolve({
-                command,
-                destination,
-                config,
-                targetConfig,
-                catalog,
-                state
-            })
-        } else {
-            return Promise.resolve({
-                command,
-                destination,
-                config,
-                targetConfig
-            })
-        }
+        const state = readAndParseJSONFile(statePath);
+        return Promise.resolve({
+            state
+        })
     }
 
     writeCatalog(catalog: CatalogFile): Promise<void> {
-        return writeFile(catalogPath, JSON.stringify(catalog))
+        return Promise.resolve();
     }
 
     writeState(state: string): Promise<void> {
@@ -143,16 +92,11 @@ export class LocalFilesResolver extends Resolver {
             .join(`\n`)
 
         return writeFile(metricsPath, metricsOuput);
-
     }
 
     updateSourceValue(optionKey: string, optionValue: string): Promise<void> {
         logger.info(`Updating source value ${optionKey} with value ${optionValue}`, { private: true })
-
-        const config = readAndParseJSONFile(configPath);
-        config[optionKey] = optionValue;
-        return writeFile(configPath, JSON.stringify(config));
-
+        return Promise.resolve();
     }
 
     getLogFormat(): winston.Logform.Format {

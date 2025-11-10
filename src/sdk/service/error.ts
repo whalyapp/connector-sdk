@@ -1,6 +1,5 @@
 import { gracefulExit } from "./exit";
 import { logger } from "./logger";
-import { loadResolver } from "./resolver"
 import { ErrorType } from "../models/error";
 
 export const haltAndCatchFire = async (
@@ -19,8 +18,6 @@ export const haltAndCatchFire = async (
         errorText,
         errorDebugText
     )
-    const resolver = loadResolver();
-    await resolver.onError(errorType, errorText, errorDebugText)
     // we return sucess but we let the sucess job pass the error params
     await gracefulExit(0);
 }

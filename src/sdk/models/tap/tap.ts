@@ -1,5 +1,7 @@
+import cloneDeep from "lodash/cloneDeep.js";
 import { logger } from "../../service/logger";
-import { StateService } from "../state";
+import { InputTapState, StateService } from "../state";
+import { StateProvider } from "../state-provider/types";
 import { ITarget } from "../target/target";
 import { Stream } from "./stream";
 import Bluebird from "bluebird";
@@ -13,19 +15,32 @@ export abstract class Tap<C> {
     config: C;
     streams: Stream[];
     concurrency: number = DEFAULT_MAX_CONCURRENT_STREAMS;
+    stateProvider: StateProvider;
+    tapState: InputTapState;
 
+    // To be implemented by the concrete tap implementation
     abstract init(): Promise<void>;
 
     constructor(
         target: ITarget,
-        config: C
+        config: C,
+        stateProvider: StateProvider
     ) {
         this.streams = [];
         this.target = target;
         this.config = config
+        this.stateProvider = stateProvider;
+        this.tapState = { bookmarks: {} };
     }
     sync = async (options?: SyncOptions): Promise<void> => {
 
+        // Set the initial state from the state provider
+        const initialState = await this.stateProvider.getState();
+        if(initialState.state && initialState.state.bookmarks) {
+            this.tapState = cloneDeep(initialState.state);
+        }
+
+        await this.init();
         logger.info(`🚀 Start syncing`)
 
         const state = StateService.getInstance().get();

@@ -1,6 +1,6 @@
 import { logger } from "../../service/logger";
-import { StreamId } from "../catalog";
-import { ReplicationMethod } from "../models";
+import { StreamId } from "../metadata";
+import { ReplicationMethod } from "../replication";
 import { FlattenedSchema, InternalTableField, JSONSchemaFieldDefinition, WarehouseTableField } from "./models";
 import { RenameColumnStore } from "./renameColumnStore";
 import retry from 'async-retry';

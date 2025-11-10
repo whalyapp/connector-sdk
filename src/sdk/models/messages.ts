@@ -1,6 +1,5 @@
-import { StreamId } from "./catalog";
-import { ReplicationMethod } from "./models";
-import { DirectionalRelationships } from "./relationship";
+import { StreamId } from "./metadata";
+import { ReplicationMethod } from "./replication";
 import { PropertiesMetadata } from "./schema";
 
 export type MessageType = "RECORD" | "STATE" | "SCHEMA" | "ACTIVATE_VERSION" | "REPLICATION_METHOD";
@@ -80,7 +79,6 @@ export class SchemaMessage implements Message {
     displayLabel: string | undefined;
     description: string | undefined;
     propertiesMetadata: PropertiesMetadata | undefined
-    relationships: DirectionalRelationships;
 
     constructor(opts: {
         stream: StreamId,
@@ -89,7 +87,6 @@ export class SchemaMessage implements Message {
         bookmarkProperties?: string[],
         displayLabel?: string,
         description?: string,
-        relationships: DirectionalRelationships,
         propertiesMetadata?: PropertiesMetadata | undefined
     }) {
         const {
@@ -99,7 +96,6 @@ export class SchemaMessage implements Message {
             bookmarkProperties,
             displayLabel,
             description,
-            relationships,
             propertiesMetadata
         } = opts;
 
@@ -109,7 +105,6 @@ export class SchemaMessage implements Message {
         this.bookmarkProperties = bookmarkProperties;
         this.displayLabel = displayLabel;
         this.description = description;
-        this.relationships = relationships;
         this.propertiesMetadata = propertiesMetadata;
     }
 
@@ -121,7 +116,6 @@ export class SchemaMessage implements Message {
             key_properties: this.keyProperties,
             label: this.displayLabel,
             description: this.description,
-            relationships: this.relationships
         }
 
         if (this.bookmarkProperties) {

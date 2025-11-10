@@ -1,6 +1,4 @@
 import * as winston from "winston";
-
-import { loadResolver } from "./resolver";
 export const BATCH_INTERVAL_MS = 100;
 
 const transports = {
@@ -16,8 +14,15 @@ const getTransports = (): winston.transport[] => {
     ]
 }
 
+const { combine, prettyPrint, timestamp, errors, splat } = winston.format;
+
 const winstonLogger = winston.createLogger({
-    format: loadResolver().getLogFormat(),
+    format: combine(
+        timestamp(),
+        errors({ stack: true }),
+        splat(),
+        prettyPrint()
+    ),
     transports: getTransports(),
 });
 

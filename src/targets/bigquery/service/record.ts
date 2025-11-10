@@ -1,5 +1,5 @@
 import Decimal from "decimal.js";
-import moment from "moment";
+import dayjs from "dayjs";
 import { defaultDateTimeFormat } from "../../../sdk/constants/date";
 import { FlattenedSchema } from "../../../sdk/models/target/models";
 import { logger } from "../../../sdk/service/logger";
@@ -13,14 +13,14 @@ export const validateDateRange = (record: any, schema: FlattenedSchema): any => 
 
         if (format === "date-time") {
             if (record[key]) {
-                const formattedDate = moment(record[key]).format(defaultDateTimeFormat);
-                // sometimes we have moment that cannot convert a value that seemed appropriate previously so we need to skip it
-                // ie: in the tap we had as an output from moment "20222-07-01T00:00:00.000000+00:00"
+                const formattedDate = dayjs(record[key]).format(defaultDateTimeFormat);
+                // sometimes we have dayjs that cannot convert a value that seemed appropriate previously so we need to skip it
+                // ie: in the tap we had as an output from dayjs "20222-07-01T00:00:00.000000+00:00"
                 // and reading it back in the target gives "Invalid date"
 
                 // we also need to check it the date is greater that the limit in order to avoid chaos
-                const isNotTooMuchInTheFuture = moment(record[key]).isBefore(moment("9999-12-31 23:59:59.999999"));
-                const isNotTooMuchInThePast = moment(record[key]).isAfter(moment("0001-01-01 00:00:00"))
+                const isNotTooMuchInTheFuture = dayjs(record[key]).isBefore(dayjs("9999-12-31 23:59:59.999999"));
+                const isNotTooMuchInThePast = dayjs(record[key]).isAfter(dayjs("0001-01-01 00:00:00"))
                 if (formattedDate !== "Invalid date" && isNotTooMuchInTheFuture && isNotTooMuchInThePast) {
                     record[key] = formattedDate
                 } else {

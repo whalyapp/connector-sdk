@@ -1,16 +1,14 @@
-import moment from "moment";
+import dayjs, { Dayjs } from "dayjs";
 import { defaultDateTimeFormat } from "../../constants/date";
 import { isDatetimeType } from "../../helpers/typing";
 import { logger } from "../../service/logger";
-import { findRelatedRelationships } from "../../service/relationship";
 import { loadJson } from "../../utils";
-import { StreamId } from "../catalog";
+import { StreamId } from "../metadata";
 import { RecordMessage, ReplicationMethodMessage, SchemaMessage, StateMessage } from "../messages";
-import { ReplicationMethod } from "../models";
+import { ReplicationMethod } from "../replication";
 import { extractStateForStream, finalizeStateProgressMarkers, incrementStreamState, InputTapState, StateService } from "../state";
 import { ITarget } from "../target/target";
 import cloneDeep from "lodash/cloneDeep.js";
-import { StreamRelationship } from "../relationship";
 import { Schema } from "../schema";
 import Bluebird from "bluebird";
 import { DEFAULT_MAX_CONCURRENT_STREAMS } from "./tap";
@@ -31,9 +29,7 @@ export abstract class Stream<O = any, C = any, P = undefined> {
     tapState: InputTapState;
     target: ITarget;
 
-    // Compile time values, can be overriden
-    // Replication method that can be forced in the stream implemenation. Will prevail over any user/catalog choice
-    forcedReplicationMethod: ReplicationMethod | undefined = undefined;
+    replicationMethod: ReplicationMethod | undefined = undefined;
     selectedByDefault: boolean = true;
     STATE_MSG_FREQUENCY: number = 10;
     streamId: StreamId = "default";
@@ -41,11 +37,9 @@ export abstract class Stream<O = any, C = any, P = undefined> {
     displayLabel: string | undefined = undefined;
     description: string | undefined = undefined;
     primaryKey: string[] = [];
-    forcedReplicationKey: string | undefined = undefined;
+    replicationKey: string | undefined = undefined;
     // When set, use the state from another stream for this stream
     useStateFromStreamId: string | undefined = undefined;
-
-    relationships: StreamRelationship[] = []
 
     children: Stream<any, any, O | O[]>[] = [];
     // If true, it means that the records in this stream are sorted by replicationKey.
@@ -63,12 +57,12 @@ export abstract class Stream<O = any, C = any, P = undefined> {
 
     constructor(
         config: C,
-        state: InputTapState,
+        tapState: InputTapState,
         target: ITarget,
         childConcurrency: number = DEFAULT_MAX_CONCURRENT_STREAMS
     ) {
         this.config = config;
-        this.tapState = cloneDeep(state);
+        this.tapState = cloneDeep(tapState);
         this.target = target;
         this.childConcurrency = childConcurrency;
 
@@ -164,14 +158,12 @@ export abstract class Stream<O = any, C = any, P = undefined> {
         if (!this.isSilent) {
             const schema = await this.getSchema();
             if (schema !== undefined) {
-                const relatedRels = findRelatedRelationships(this.streamId, this.relationships);
                 const replicationConfig = this.configuredReplicationConfig();
 
                 const message = new SchemaMessage({
                     keyProperties: this.primaryKey,
                     stream: this.streamId,
                     schema: schema.jsonSchema,
-                    relationships: relatedRels,
                     ...(replicationConfig.replicationKey ? { bookmarkProperties: [replicationConfig.replicationKey] } : {}),
                     ...(this.displayLabel ? { displayLabel: this.displayLabel } : {}),
                     ...(this.description ? { description: this.description } : {}),
@@ -195,7 +187,7 @@ export abstract class Stream<O = any, C = any, P = undefined> {
         const signpostValue = signpostMoment?.format(defaultDateTimeFormat);
 
         if (signpostValue) {
-            StateService.getInstance().setBookmarkSignpostV2(this.streamId, signpostValue);
+            StateService.getInstance().setBookmarkSignpost(this.streamId, signpostValue);
         }
     }
 
@@ -216,7 +208,7 @@ export abstract class Stream<O = any, C = any, P = undefined> {
                 }
                 // If the replication method was forced, it can be that the stream is the child of anohter stream that is managing the state (ex. a paginated stream). 
                 // The state is not owned by the current stream then.
-                if (this.forcedReplicationMethod && !this.forcedReplicationKey) {
+                if (this.replicationMethod && !this.replicationKey) {
                     return;
                 }
 
@@ -228,7 +220,7 @@ export abstract class Stream<O = any, C = any, P = undefined> {
                 }
 
                 const stateServiceInst = StateService.getInstance();
-                const state = stateServiceInst.getBookmarkV2(this.streamId);
+                const state = stateServiceInst.getBookmark(this.streamId);
 
                 const newState = incrementStreamState(
                     state,
@@ -237,7 +229,7 @@ export abstract class Stream<O = any, C = any, P = undefined> {
                     this.isSorted
                 )
 
-                StateService.getInstance().setBookmarkV2(this.streamId, newState)
+                StateService.getInstance().setBookmark(this.streamId, newState)
             }
         }
     }
@@ -274,8 +266,10 @@ export abstract class Stream<O = any, C = any, P = undefined> {
      * or `start_date` config if set, 
      * or the UNIX Epoch
      **/
-    getStartingTimestamp(): moment.Moment {
-        const streamIdToReadFrom = this.useStateFromStreamId ? this.useStateFromStreamId : this.streamId;
+    getStartingTimestamp(): Dayjs {
+        const streamIdToReadFrom = this.useStateFromStreamId
+            ? this.useStateFromStreamId
+            : this.streamId;
         const state = extractStateForStream(this.tapState, streamIdToReadFrom);
 
         const startDate = (this.config as any).start_date as string | undefined;
@@ -287,29 +281,29 @@ export abstract class Stream<O = any, C = any, P = undefined> {
 
         if (state.replicationKeyValue) {
             logger.debug(`${this.streamId} - getStartingTimestamp -> Returning replication key value: ${state.replicationKeyValue}`)
-            return moment(state.replicationKeyValue);
+            return dayjs(state.replicationKeyValue);
         } else if (startDate) {
             logger.debug(`${this.streamId} - getStartingTimestamp -> Returning config start date: ${startDate}`)
-            return moment(startDate)
+            return dayjs(startDate)
         } else {
             logger.debug(`${this.streamId} - getStartingTimestamp -> Returning EPOCH (1970)`)
-            return moment(0);
+            return dayjs(0);
         }
     }
 
     /**
      * Return the max allowable bookmark value for this stream's replication key.
      * 
-     * For timestamp-based replication keys, this defaults to `moment()`. For
+     * For timestamp-based replication keys, this defaults to `dayjs()`. For
      * non-timestamp replication keys, default to `undefined`.
      * 
      * Override this value to prevent bookmarks from being advanced in cases where we
      * may only have a partial set of records.
      */
-    getReplicationKeySignpost = async (): Promise<moment.Moment | undefined> => {
+    getReplicationKeySignpost = async (): Promise<Dayjs | undefined> => {
 
         if (await this.isTimestampReplicationKey()) {
-            return moment()
+            return dayjs()
         }
 
         return undefined
@@ -324,23 +318,23 @@ export abstract class Stream<O = any, C = any, P = undefined> {
         // When replication method is forced, it means that end user can't override it.
         isForced: boolean
     } => {
-        if (this.forcedReplicationMethod) {
+        if (this.replicationMethod) {
             return {
-                replicationMethod: this.forcedReplicationMethod,
-                replicationKey: this.forcedReplicationKey,
+                replicationMethod: this.replicationMethod,
+                replicationKey: this.replicationKey,
                 isForced: true
             }
         }
-        if (this.forcedReplicationKey || this.useStateFromStreamId) {
+        if (this.replicationKey || this.useStateFromStreamId) {
             return {
-                replicationMethod: "INCREMENTAL",
-                replicationKey: this.forcedReplicationKey,
+                replicationMethod: ReplicationMethod.INCREMENTAL,
+                replicationKey: this.replicationKey,
                 isForced: true
             }
         }
 
         return {
-            replicationMethod: "FULL_TABLE",
+            replicationMethod: ReplicationMethod.FULL_TABLE,
             replicationKey: undefined,
             isForced: false
         }
@@ -416,9 +410,9 @@ export abstract class Stream<O = any, C = any, P = undefined> {
         }
 
         const stateServiceInst = StateService.getInstance();
-        const state = stateServiceInst.getBookmarkV2(this.streamId);
+        const state = stateServiceInst.getBookmark(this.streamId);
         const newState = finalizeStateProgressMarkers(state);
-        stateServiceInst.setBookmarkV2(this.streamId, newState);
+        stateServiceInst.setBookmark(this.streamId, newState);
 
         if (!parent) {
             logger.info(`✅ Completed sync for stream: ${this.streamId} (${rowsSent} records)`);

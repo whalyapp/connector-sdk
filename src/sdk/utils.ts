@@ -1,11 +1,5 @@
 import { readFileSync } from "fs";
 import { logger } from "./service/logger.js";
-import { Resolver } from "./models/resolver.js";
-
-export const writeStateFile = (resolver: Resolver, state: string): Promise<void> => {
-    logger.info(`📝 Writing the state file.`)
-    return resolver.writeState(state);
-}
 
 function readFile(fileName: string, filePath: string) {
     try {

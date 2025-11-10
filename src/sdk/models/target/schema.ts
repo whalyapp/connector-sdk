@@ -1,4 +1,4 @@
-import { StreamId } from "../catalog";
+import { StreamId } from "../metadata";
 import { FlattenedSchema } from "./models";
 import { logger } from "../../service/logger";
 import { gracefulExit } from "../../service/exit";

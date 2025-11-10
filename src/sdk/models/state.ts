@@ -1,6 +1,6 @@
-import { StreamId } from "./catalog";
+import { StreamId } from "./metadata";
 import { StateMessage } from "./messages";
-import moment from "moment";
+import dayjs, { Dayjs } from "dayjs";
 import { ITarget } from "./target/target";
 import { defaultDateTimeFormat } from "../constants/date";
 import { format } from "util";
@@ -56,14 +56,14 @@ export const incrementStreamState = (
     if (!newRkValue) {
         throw new Error(format(`No value for replicationKey: ${replicationKey} in record with keys: %j`, Object.keys(latestRecord)))
     }
-    let newRkValueMoment = moment(newRkValue);
+    let newRkValueMoment = dayjs(newRkValue);
 
     let prevRkValue: string | undefined;
-    let prevRkValueMoment: moment.Moment | undefined;
+    let prevRkValueMoment: Dayjs | undefined;
 
     if (isSorted) {
         prevRkValue = state["replicationKeyValue"];
-        prevRkValueMoment = moment(prevRkValue);
+        prevRkValueMoment = dayjs(prevRkValue);
         if (prevRkValue && prevRkValueMoment.isAfter(newRkValueMoment)) {
             throw new Error(
                 `Unsorted data detected in stream. Latest value '${newRkValue}' is
@@ -86,7 +86,7 @@ export const incrementStreamState = (
 
         // In case we don't have any previous value in the PROGRESS_MARKERS, 
         // which happens for the first record of the current sync, we take the last state value
-        prevRkValueMoment = moment(prevRkValue || state["replicationKeyValue"]);
+        prevRkValueMoment = dayjs(prevRkValue || state["replicationKeyValue"]);
 
         // If we just got an "old" record, we keep the previous state as the max ts
         if (prevRkValue && prevRkValueMoment.isAfter(newRkValueMoment)) {
@@ -98,7 +98,7 @@ export const incrementStreamState = (
     // Signpost is the moment we start the current sync,
     // we make sure that our replication value can't be greater than the signpost
     const signpostMarker = state[SIGNPOST_MARKER];
-    const replicationKeySignpostMoment = moment(signpostMarker);
+    const replicationKeySignpostMoment = dayjs(signpostMarker);
 
     if (replicationKeySignpostMoment && replicationKeySignpostMoment.isBefore(newRkValueMoment)) {
         // Overflowed max bookmark threshold, reset to the max for this key:
@@ -108,10 +108,10 @@ export const incrementStreamState = (
 
     if (isSorted === false) {
         (state[PROGRESS_MARKERS] as ProgressMarkers)['replicationKey'] = replicationKey;
-        (state[PROGRESS_MARKERS] as ProgressMarkers)['replicationKeyValue'] = moment(newRkValueMoment).format(defaultDateTimeFormat);
+        (state[PROGRESS_MARKERS] as ProgressMarkers)['replicationKeyValue'] = dayjs(newRkValueMoment).format(defaultDateTimeFormat);
     } else {
         state['replicationKey'] = replicationKey;
-        state['replicationKeyValue'] = moment(newRkValueMoment).format(defaultDateTimeFormat);
+        state['replicationKeyValue'] = dayjs(newRkValueMoment).format(defaultDateTimeFormat);
     }
 
     return state;
@@ -149,7 +149,7 @@ export const finalizeStateProgressMarkers = (state: StreamState): StreamState =>
 }
 
 export const _greaterThan = (aValue: string, bValue: string): boolean => {
-    return moment(aValue).isAfter(moment(bValue));
+    return dayjs(aValue).isAfter(dayjs(bValue));
 }
 
 export const extractStateForStream = (state: InputTapState, streamId: StreamId) => {
@@ -180,33 +180,18 @@ export class StateService {
         return this.instance;
     }
 
-    // To be deprecated
-    setBookmark(streamId: StreamId, ts: moment.Moment) {
-        this.bookmarks[streamId] = ts.format(defaultDateTimeFormat)
-    }
-
-    setBookmarkV2(streamId: StreamId, streamState: StreamState) {
+    setBookmark(streamId: StreamId, streamState: StreamState) {
         this.bookmarks[streamId] = streamState;
     }
 
-    setBookmarkSignpostV2(streamId: StreamId, signpostValue: string) {
+    setBookmarkSignpost(streamId: StreamId, signpostValue: string) {
         if (!this.bookmarks[streamId]) {
             this.bookmarks[streamId] = {}
         }
         this.bookmarks[streamId][SIGNPOST_MARKER] = signpostValue;
     }
 
-    getBookmark(streamId: StreamId): moment.Moment {
-        // This set the bookmarkTs at EPOCH time (1970) if it's not defined
-        if (!this.bookmarks[streamId]) {
-            return moment(0);
-        }
-
-        return moment(this.bookmarks[streamId])
-    }
-
-    getBookmarkV2(streamId: StreamId): StreamState {
-
+    getBookmark(streamId: StreamId): StreamState {
         if (this.bookmarks[streamId]) {
             return this.bookmarks[streamId];
         } else {

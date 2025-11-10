@@ -1,8 +1,7 @@
 import { ReplicationMethodMessage, RecordMessage, SchemaMessage, StateMessage } from "../messages";
-import { Resolver } from "../resolver";
 import { TargetSchemaHook, TargetSchemaHookInput } from "./targetHook";
 import { Validator } from "jsonschema";
-import moment from "moment";
+import dayjs, { Dayjs } from "dayjs";
 import { RenameColumnStore, SafeColumnNameConverterFn } from "./renameColumnStore";
 import { StreamState } from "./streamDbState";
 import { logger } from "../../service/logger";
@@ -10,21 +9,20 @@ import { MissingSchemaError, SchemaValidationError } from "./error";
 import { addWhalyFields, removeParasiteProperties } from "./record";
 import { BaseConfig, FlattenedSchema } from "./models";
 import { flattenSchema } from "./schema";
-import { writeStateFile } from "../../utils";
-import { loadResolver } from "../../service/resolver";
-import { StreamId } from "../catalog";
 import { StreamWarehouseSyncService } from "./dbSync";
 import { Semaphore } from "async-mutex";
-import { ReplicationMethod } from "../models";
+import { ReplicationMethod } from "../replication";
 import Bluebird from "bluebird";
+import { StateProvider } from "../state-provider/types";
+import { StreamId } from "../metadata";
 
 const semaphore = new Semaphore(1);
 
 export abstract class ITarget<C extends BaseConfig = BaseConfig> {
     config: C;
     schemaHooks: TargetSchemaHook[]
-    resolver: Resolver;
-    syncTime: moment.Moment;
+    syncTime: Dayjs;
+    stateProvider: StateProvider;
 
     // Latest state message received from the Tap
     // Not yet flushed as we didn't upload the stream data since receiving it 
@@ -43,10 +41,10 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
     // JSON Schema validator
     validator: Validator
 
-    constructor(config: C, resolver: Resolver) {
+    constructor(config: C, stateProvider: StateProvider) {
         this.config = config;
-        this.resolver = resolver;
-        this.schemaHooks = resolver.getSchemaHooks();
+        this.stateProvider = stateProvider;
+        this.schemaHooks = [];
 
         this.streams = {}
 
@@ -54,7 +52,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
         this.flushedState = {}
 
         this.validator = new Validator();
-        this.syncTime = moment();
+        this.syncTime = dayjs();
 
         this.renameColumnStore = new RenameColumnStore()
     }
@@ -227,7 +225,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
         this.streams[streamId] = new StreamState(
             streamId,
             dbSyncInstance,
-            replicationMethod || "FULL_TABLE"
+            replicationMethod || ReplicationMethod.FULL_TABLE
         );
     }
 
@@ -326,51 +324,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
                         return translation;
                     }
                     return k
-                }),
-                relationships: {
-                    left: message.relationships.left.flatMap(l => {
-                        // If the other stream in the relationship have not been processed, they are not ready and we can't declare the relationship.
-                        // It'll be declared when those other streams are processed
-                        if (
-                            this.renameColumnStore.isReady(l.streamId)
-                            && this.renameColumnStore.isReady(message.stream)
-                        ) {
-                            const from = this.renameColumnStore.getColumnTranslation(l.streamId, l.from);
-                            const to = this.renameColumnStore.getColumnTranslation(message.stream, l.to);
-                            if (from && to) {
-                                return [{
-                                    type: l.type,
-                                    streamId: l.streamId,
-                                    from: from,
-                                    to: to
-                                }]
-                            }
-                        }
-                        // Default case
-                        return []
-                    }),
-                    right: message.relationships.right.flatMap(r => {
-                        // If the other stream in the relationship have not been processed, they are not ready and we can't declare the relationship.
-                        // It'll be declared when those other streams are processed
-                        if (
-                            this.renameColumnStore.isReady(message.stream)
-                            && this.renameColumnStore.isReady(r.streamId)
-                        ) {
-                            const from = this.renameColumnStore.getColumnTranslation(message.stream, r.from);
-                            const to = this.renameColumnStore.getColumnTranslation(r.streamId, r.to);
-                            if (from && to) {
-                                return [{
-                                    type: r.type,
-                                    streamId: r.streamId,
-                                    from: from,
-                                    to: to
-                                }]
-                            }
-                        }
-                        // Default case
-                        return []
-                    }),
-                }
+                })
             }
 
             await Bluebird.map(this.schemaHooks, async (hook) => {
@@ -411,9 +365,6 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
             logger.info(`👍 Data Extraction is complete. Will load remaining batched stream records.`)
 
             await this.loadAllStreamsInWarehouse({ isFinalLoad: true });
-            const configResolver = loadResolver();
-            await configResolver.markSyncComplete();
-            await configResolver.flushMetrics();
             return Promise.resolve();
         } catch (err) {
             logger.error(`Error while handling complete event.`)
@@ -466,8 +417,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
     }
 
     private emitState = (state: any): Promise<void> => {
-        const configResolver = loadResolver();
-        return writeStateFile(configResolver, JSON.stringify(state));
+        return this.stateProvider.writeState(JSON.stringify(state));
     }
 
     private uploadStreamsToWarehouse = async (

@@ -1,7 +1,7 @@
-import moment from "moment";
+import dayjs, { Dayjs } from "dayjs";
 import { defaultDateTimeFormat } from "../../constants/date";
-import { StreamId } from "../catalog";
-import { ReplicationMethod } from "../models";
+import { StreamId } from "../metadata";
+import { ReplicationMethod } from "../replication";
 import { StreamWarehouseSyncService } from "./dbSync";
 import { FlattenedSchema, TempFile } from "./models";
 import { createTemporaryFileStream } from "./temporaryFile";
@@ -13,7 +13,7 @@ export class StreamState {
     schema?: FlattenedSchema;
     dbSync: StreamWarehouseSyncService;
 
-    batchDate: moment.Moment;
+    batchDate: Dayjs;
 
     // Count rows batched in the local file, waiting for Warehouse upload
     batchedRowCount: number;
@@ -42,7 +42,7 @@ export class StreamState {
         this.fileToLoad = createTemporaryFileStream(streamId);
         this.syncedRowCount = 0;
         this.keyProperties = [];
-        this.batchDate = moment();
+        this.batchDate = dayjs();
         this.replicationMethod = replicationMethod;
         this._hasBeenLoadedYetDuringThisSync = false;
     }

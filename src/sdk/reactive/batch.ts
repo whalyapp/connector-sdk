@@ -1,4 +1,3 @@
-
 export class BatchSingletonHolder<T = unknown> {
 
         private static instance: {[key: string]: Batch<unknown>};

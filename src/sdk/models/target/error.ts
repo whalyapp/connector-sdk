@@ -1,5 +1,5 @@
 import { ValidationError } from "jsonschema";
-import { StreamId } from "../catalog";
+import { StreamId } from "../metadata";
 
 export class SchemaValidationError extends Error {
 

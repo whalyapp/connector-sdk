@@ -1,12 +1,13 @@
 import { Storage, File } from '@google-cloud/storage';
 import { v4 as uuidv4 } from 'uuid';
-import { StreamId } from '../../../sdk/models/catalog';
+import { StreamId } from '../../../sdk/models/metadata';
 import { haltAndCatchFire } from '../../../sdk/service/error';
 import { logger } from '../../../sdk/service/logger';
 
 export const uploadFileInBucket = async (
     streamId: StreamId,
     gcsBuckerName: string,
+    connectorId: string,
     filePath: string,
 ): Promise<File> => {
 
@@ -20,7 +21,7 @@ export const uploadFileInBucket = async (
         // Bucket should already have been created on the proper Google Cloud region
         await bucketRef.get({ autoCreate: false });
 
-        const destinationFileName = `${streamId}-${uuidv4()}.jsonnl`;
+        const destinationFileName = `${connectorId}/${streamId}-${uuidv4()}.jsonnl`;
 
         await bucketRef.upload(filePath, {
             destination: destinationFileName

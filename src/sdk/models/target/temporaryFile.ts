@@ -1,6 +1,6 @@
 import fs from 'fs-extra';
 import uniqueId from 'lodash/uniqueId.js';
-import { StreamId } from '../catalog';
+import { StreamId } from '../metadata';
 import { TempFile } from './models';
 
 export const createTemporaryFileStream = (streamId: StreamId): TempFile => {

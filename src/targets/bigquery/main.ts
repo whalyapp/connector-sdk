@@ -2,15 +2,16 @@ import { ITarget } from "../../sdk/models/target/target"
 import { BigQueryConfig } from "./models/config";
 
 import { safeColumnName, safeTableName } from "./helpers";
-import { Resolver } from "../../sdk/models/resolver";
 import { convertNumberIntoDecimal, validateDateRange } from "./service/record";
 import { BigQueryDBSync } from "./service/dbSync";
-import { StreamId } from "../../sdk/models/catalog";
+import { StreamId } from "../../sdk/models/metadata";
+import { StateProvider } from "../../sdk/models/state-provider/types";
 
 export class BigQueryTarget extends ITarget<BigQueryConfig> {
 
-    constructor(config: BigQueryConfig, resolver: Resolver) {
-        super(config, resolver);
+
+    constructor(config: BigQueryConfig, stateProvider: StateProvider) {
+        super(config, stateProvider);
         this.renameColumnStore.setSafeColumnNameConverter(this.safeColumnNameConverter);
     }
     static requiredConfigKeys = [
@@ -31,7 +32,7 @@ export class BigQueryTarget extends ITarget<BigQueryConfig> {
             database,
             schema,
             table,
-            this.renameColumnStore
+            this.renameColumnStore,
         )
     };
 

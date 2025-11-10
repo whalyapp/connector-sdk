@@ -1,7 +1,7 @@
-import { StreamId } from "../../../sdk/models/catalog";
+import { StreamId } from "../../../sdk/models/metadata";
 import { logger } from "../../../sdk/service/logger";
 import { Dataset, TableMetadata, TableField, Table, BigQuery, JobLoadMetadata } from "@google-cloud/bigquery";
-import moment from "moment";
+import dayjs from "dayjs";
 import { BqClientHolder } from "./bigquery";
 import { File } from '@google-cloud/storage';
 import { uploadFileInBucket } from "./cloudStorage";
@@ -35,7 +35,7 @@ export class BigQueryDBSync extends StreamWarehouseSyncService {
         database: string,
         schema: string,
         table: string,
-        renameColumnStore: RenameColumnStore
+        renameColumnStore: RenameColumnStore,
     ) {
         super(
             streamId,
@@ -330,7 +330,7 @@ export class BigQueryDBSync extends StreamWarehouseSyncService {
             }
 
             const schema = this.generateBigquerySchema();
-            const expirationTime = moment().add("1", "day").valueOf().toString();
+            const expirationTime = dayjs().add(1, "day").valueOf().toString();
             const createTableOptions: TableMetadata = {
                 schema,
                 expirationTime
@@ -359,6 +359,7 @@ export class BigQueryDBSync extends StreamWarehouseSyncService {
             const file = await uploadFileInBucket(
                 this.streamId,
                 this.config.loading_deck_gcs_bucket_name,
+                this.config.connector_id,
                 localFilePath
             );
 

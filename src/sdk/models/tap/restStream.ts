@@ -48,15 +48,30 @@ export abstract class RESTStream<R, O, NPT, C, P = undefined>
         : Promise<AxiosRequestConfig> => {
 
         const method = this.httpMethod;
-        const url = this.getUrl(parent);
+        const url = this.getNextUrl(nextPageToken, parent);
         if (!url) {
             throw new Error(`StreamId: ${this.streamId} - URL is undefined. Did your properly define the URL for this stream?`)
         }
 
         const authenticator = this.authenticator
 
+        // If getNextUrl returns a URL that already contains query string parameters,
+        // extract them and merge into params. We remove the query part from the URL
+        // to avoid duplication with axios params handling.
+        let finalUrl = url;
+        let urlQueryParams: Record<string, any> = {};
+        const queryIndex = url.indexOf("?");
+        if (queryIndex !== -1) {
+            finalUrl = url.substring(0, queryIndex);
+            const rawQueryString = url.substring(queryIndex + 1);
+            urlQueryParams = qs.parse(rawQueryString) as Record<string, any>;
+        }
+
         const params = {
             ...this.getNextUrlParams(nextPageToken, parent),
+            // Query params embedded in URL should override computed pagination params
+            // but should not override auth params which are appended last
+            ...urlQueryParams,
             ...(await authenticator?.getAuthQS(this.config))
         }
 
@@ -79,7 +94,7 @@ export abstract class RESTStream<R, O, NPT, C, P = undefined>
         }
 
         const request: AxiosRequestConfig = {
-            url,
+            url: finalUrl,
             method,
             data: requestBody,
             params,
@@ -250,7 +265,7 @@ export abstract class RESTStream<R, O, NPT, C, P = undefined>
      * TODO: Make URL + Path templatisable and replace those with Extractor (or Tap) config
      * @returns 
      */
-    getUrl(parent?: P): string {
+    getNextUrl(previousToken?: NPT,parent?: P): string {
         const urlPattern = [this.baseUrl, this.path].join("")
         return urlPattern;
     }

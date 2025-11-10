@@ -1,5 +1,5 @@
 import { WriteStream } from "fs"
-import { StreamId } from "../catalog";
+import { StreamId } from "../metadata";
 
 export interface FlattenedSchema {
     [unsafePropertyName: string]: JSONSchemaFieldDefinition
@@ -33,6 +33,7 @@ export interface StreamWithTempFile {
 }
 
 export interface BaseConfig {
-    schema: string,
-    database: string
+    connector_id: string;
+    database: string;
+    schema: string;
 }

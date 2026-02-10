@@ -1,0 +1,119 @@
+import { WorkBook } from "xlsx";
+import { ReplicationMethod } from "../models/replication";
+
+// Re-export WorkBook so client projects don't need xlsx as a direct dependency
+export type { WorkBook } from "xlsx";
+
+// Re-export ReplicationMethod so file-processing consumers don't need a separate import
+export { ReplicationMethod } from "../models/replication";
+
+/**
+ * Field types for file processing columns.
+ * Maps to JSON Schema types via fieldTypeToJsonSchema().
+ */
+export type FieldType = "STRING" | "FLOAT" | "TIMESTAMP";
+
+export enum FileFormat {
+    CSV = "CSV",
+    EXCEL = "EXCEL",
+}
+
+// ─── Excel Types ───────────────────────────────────────────────────────
+
+export type ExcelFieldSpec = ExcelSourceColumn | ExcelDerivedField;
+
+export interface ExcelSourceColumn {
+    type: FieldType;
+    column: string;
+    primaryKey?: boolean;
+}
+
+export interface ExcelDerivedField {
+    variableName: string;
+    primaryKey?: boolean;
+    type: FieldType;
+}
+
+export interface ExcelFieldMapping {
+    [key: string]: ExcelFieldSpec;
+}
+
+export type ExcelExtractionConfig = ExcelSingleSheetExtractionConfig | ExcelCustomExtractorConfig;
+
+export interface ExcelExtractionBaseConfig {
+    type: "single-sheet-extraction" | "processor";
+    extension: string;
+    fileNameValidator: (fileName: string) => boolean;
+    fileNameVariablesExtractor: (fileName: string, workbook?: WorkBook) => { [key: string]: string | undefined };
+    tableName: string | ((fileName: string, workbook?: WorkBook, variables?: { [key: string]: string | undefined }) => string);
+    replicationMethod: ReplicationMethod;
+}
+
+export interface ExcelCustomExtractorConfig extends ExcelExtractionBaseConfig {
+    type: "processor";
+    processor: (workbook: WorkBook) => Promise<Record<string, string>[]>;
+}
+
+export interface ExcelSingleSheetExtractionConfig extends ExcelExtractionBaseConfig {
+    type: "single-sheet-extraction";
+    columns: ExcelFieldMapping;
+    sheetName?: string;
+    numberOfRowsToSkip: number;
+}
+
+// ─── CSV Types ─────────────────────────────────────────────────────────
+
+export type CsvFieldsConfig = CsvFieldsArrayConfig | CsvFieldsDictConfig;
+
+export type CsvFieldsArrayConfig = Array<{
+    key: string;
+    valueTransformer?: (val: any) => string;
+    type: FieldType;
+}>;
+
+export interface CsvFieldsDictConfig {
+    [key: string]: {
+        key: string;
+        valueTransformer?: (val: any) => string;
+        type: FieldType;
+    };
+}
+
+export interface CsvFileConfig {
+    encoding?: string;
+    separator: string;
+    fields: CsvFieldsConfig;
+    addSyncedAtColumn?: boolean;
+}
+
+// ─── FileStream Config (discriminated union) ────────────────────────────
+
+interface FileStreamBaseConfig {
+    streamId: string;
+    replicationMethod: ReplicationMethod;
+    primaryKeys: string[];
+    /**
+     * When true with FULL_TABLE replication, skip the initial truncate.
+     * This emulates the old APPEND loading strategy behavior.
+     */
+    appendOnly?: boolean;
+}
+
+export interface CsvStreamConfig extends FileStreamBaseConfig {
+    format: FileFormat.CSV;
+    csv: CsvFileConfig;
+}
+
+export interface ExcelStreamConfig extends FileStreamBaseConfig {
+    format: FileFormat.EXCEL;
+    excel: ExcelExtractionConfig;
+}
+
+export type FileStreamConfig = CsvStreamConfig | ExcelStreamConfig;
+
+// ─── FileStream Entry (for pairing config + file path) ─────────────────
+
+export interface FileStreamEntry {
+    config: FileStreamConfig;
+    filePath: string | string[];
+}

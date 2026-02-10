@@ -40,6 +40,18 @@ export * from "./sdk/models/target/target";
 export * from "./sdk/models/target/targetHook";
 export * from "./sdk/models/target/temporaryFile";
 
+/**
+ * File Processing
+ */
+export * from "./sdk/file-processing/index";
+
+/**
+ * Services
+ */
+export * from "./services/sftp";
+export * from "./services/cloud-storage";
+export * from "./services/zip";
+
 /** The SDK is including some major targets and state providers implemantations */
 export * from "./targets/bigquery/main";
 export * from "./targets/bigquery/models/config";

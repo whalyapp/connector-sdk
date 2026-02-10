@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-02-10
+
+### Added
+
+- **File Processing Module**: Complete file processing system for Excel and CSV files
+  - `FileStream` and `FileTap` classes that integrate file processing into the Tap → Stream → Target pipeline
+  - `ExcelSingleSheetExtractionConfig` for declarative column mapping from Excel sheets
+  - `ExcelCustomExtractorConfig` for custom workbook processing via processor functions
+  - `ExcelExtractionConfigBuilder` fluent builder for Excel configurations
+  - `CsvFileConfig` with support for custom separators, encodings (via iconv-lite), BOM stripping, and field transformers
+  - Both dict-style (keyed by header name) and array-style (positional) CSV field definitions
+  - `createExcelStreamConfig()` and `createCsvStreamConfig()` helper functions
+  - `processFileStreams()` for sequential file processing without the full Tap lifecycle
+  - Schema auto-generation from field configs via `excelFieldsToJsonSchema()` and `csvFieldsToJsonSchema()`
+  - Primary key extraction from field definitions
+  - `FilePatterns` utility class for filename validation (`startsWith`, `regex`, `and`, `or`)
+  - `VariableExtractors` utility class for extracting variables from filenames
+  - Derived fields support: inject variables extracted from filenames or workbook metadata into output columns
+  - Excel utility functions: `excelColumnToIndex`, `indexToExcelColumn`, `parseCellReference`, `createCellReference`, etc.
+  - `findAllMatchingConfigs()` to match filenames against an array of extraction configs
+  - `validateExcelConfig()` for config validation
+  - CSV writing utilities: `writeDataToCsv()` and `writeGeneratorToCSV()` (with 10k-row batching)
+  - CSV header validation with hex-level debugging for encoding issues
+
+- **Cloud Storage Service**: `CloudStorageService` class for Google Cloud Storage integration
+  - File listing, downloading, and uploading
+  - Marker-file-based tracking to prevent reprocessing (`.processed` suffix)
+  - Configurable file extension filtering
+
+- **SFTP Service**: Re-exported `SftpClient` and `SftpConnectOptions` from ssh2-sftp-client
+
+- **Archive Extraction**: `unzip()` utility supporting ZIP, TAR, GZ, and BZ2 via the `decompress` library
+
+### Dependencies Added
+
+- `xlsx` (0.20.3) - Excel file reading
+- `csv-parser` (3.2.0) - CSV parsing
+- `csv-writer` (1.6.0) - CSV writing
+- `iconv-lite` (0.6.3) - Character encoding conversion
+- `ssh2-sftp-client` (12.0.0) - SFTP client
+- `decompress` (4.2.1) - Archive extraction
+
 ## [0.2.0] - 2024-11-10
 
 ### Added

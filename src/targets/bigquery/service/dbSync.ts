@@ -4,7 +4,7 @@ import { Dataset, TableMetadata, TableField, Table, BigQuery, JobLoadMetadata } 
 import dayjs from "dayjs";
 import { BqClientHolder } from "./bigquery";
 import { File } from '@google-cloud/storage';
-import { uploadFileInBucket } from "./cloudStorage";
+import { CloudStorageService } from "../../../services/cloud-storage";
 import { safeColumnName } from "../helpers";
 import chunk from "lodash/chunk.js";
 import { haltAndCatchFire } from "../../../sdk/service/error";
@@ -356,11 +356,11 @@ export class BigQueryDBSync extends StreamWarehouseSyncService {
 
         try {
 
-            const file = await uploadFileInBucket(
-                this.streamId,
-                this.config.loading_deck_gcs_bucket_name,
+            const gcsService = new CloudStorageService(this.config.loading_deck_gcs_bucket_name);
+            const file = await gcsService.uploadFileWithUniqueName(
+                localFilePath,
                 this.config.connector_id,
-                localFilePath
+                this.streamId,
             );
 
             const metadata: JobLoadMetadata = {
@@ -370,8 +370,20 @@ export class BigQueryDBSync extends StreamWarehouseSyncService {
 
             await this.loadGCSFileInTable(this.sqlStagingTableId, file, metadata);
 
-        } catch (err) {
+        } catch (err: any) {
             logger.error(`StreamId: ${this.streamId} - Error while uploading stream.`)
+
+            if (err.code < 500) {
+                await haltAndCatchFire(
+                    `unauthorized`,
+                    `We couldn't connect to your Cloud Storage bucket 😔
+
+                    The error from Google is: '${err.message}' 👀
+
+                    Could you troubleshoot your Cloud Storage configuration in Google Cloud and sync again the source? 🙏`,
+                    `Got error from cloud storage lib`
+                )
+            }
             throw err;
         }
     }

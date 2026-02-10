@@ -52,6 +52,7 @@ export abstract class StreamWarehouseSyncService {
     // In order to not overload Warehouse, we update the destination table by chunks of columns as updating all the columns at once is generating a too complex query
     abstract getMergeQueries: () => string[]
     abstract getReplaceQueries: () => string[]
+    abstract getAppendQueries: () => string[]
 
     // Functions to provision the tables, columns, etc.
     abstract createDatabaseAndSchemaIfNotExists: (retryCount: number) => Promise<void>;
@@ -252,6 +253,8 @@ export abstract class StreamWarehouseSyncService {
             mergeQueries = this.getReplaceQueries();
         } else if (replicationMethod === "INCREMENTAL") {
             mergeQueries = this.getMergeQueries();
+        } else if (replicationMethod === "APPEND") {
+            mergeQueries = this.getAppendQueries();
         } else if (replicationMethod === "LOG_BASED") {
             mergeQueries = this.getMergeQueries();
         }

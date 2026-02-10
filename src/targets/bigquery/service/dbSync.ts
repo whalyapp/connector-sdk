@@ -208,6 +208,17 @@ export class BigQueryDBSync extends StreamWarehouseSyncService {
         ];
     }
 
+    getAppendQueries = (): string[] => {
+        const columnUnsafeToSafeMapping = this.renamedColumnStore.getUnsafeToSafeColumnMapping(this.streamId);
+        const columns = Object.keys(columnUnsafeToSafeMapping)
+            .map(unsafeKey => `\`${columnUnsafeToSafeMapping[unsafeKey]}\``)
+            .join(`, `);
+
+        return [
+            `INSERT INTO ${this.sqlTableId} (${columns}) SELECT ${columns} FROM ${this.sqlStagingTableId};`
+        ];
+    }
+
     createDatabaseAndSchemaIfNotExists = async (retryCount: number) => {
         try {
             // To avoid checking / creating the dataset multiple times when evaluating streams concurrently

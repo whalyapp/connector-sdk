@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`APPEND` Replication Method**: New `ReplicationMethod.APPEND` for accumulating incoming data without touching existing rows
+  - Pure `INSERT INTO ... SELECT ... FROM staging` query — no truncate, no merge, no deduplication
+  - Does not require primary keys (unlike `INCREMENTAL`)
+  - Supports intermediate batch flushing (>1M rows) to avoid memory pressure
+  - Added `abstract getAppendQueries()` to `StreamWarehouseSyncService` and implemented it in `BigQueryDBSync`
+
 - **File Processing Module**: Complete file processing system for Excel and CSV files
   - `FileStream` and `FileTap` classes that integrate file processing into the Tap → Stream → Target pipeline
   - `ExcelSingleSheetExtractionConfig` for declarative column mapping from Excel sheets
@@ -37,6 +43,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SFTP Service**: Re-exported `SftpClient` and `SftpConnectOptions` from ssh2-sftp-client
 
 - **Archive Extraction**: `unzip()` utility supporting ZIP, TAR, GZ, and BZ2 via the `decompress` library
+
+### Changed
+
+- **`keyProperties` validation relaxed**: `APPEND` streams are now allowed to have empty `keyProperties` since no merge/upsert is performed
+
+### Removed
+
+- **`appendOnly` flag**: Removed the unused `appendOnly?: boolean` field from `FileStreamBaseConfig` — superseded by `ReplicationMethod.APPEND`
 
 ### Dependencies Added
 

@@ -92,11 +92,6 @@ interface FileStreamBaseConfig {
     streamId: string;
     replicationMethod: ReplicationMethod;
     primaryKeys: string[];
-    /**
-     * When true with FULL_TABLE replication, skip the initial truncate.
-     * This emulates the old APPEND loading strategy behavior.
-     */
-    appendOnly?: boolean;
 }
 
 export interface CsvStreamConfig extends FileStreamBaseConfig {

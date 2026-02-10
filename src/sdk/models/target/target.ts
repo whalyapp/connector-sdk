@@ -300,7 +300,8 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
 
             streamState.setSchema(schema);
 
-            if (message.keyProperties.length === 0) {
+            const streamReplicationMethod = this.streams[streamId]?.getReplicationMethod();
+            if (message.keyProperties.length === 0 && streamReplicationMethod !== ReplicationMethod.APPEND) {
                 throw new Error(`StreamId: ${message.stream} - \`key_properties\` field is required and can't be empty in SCHEMA message.
             Received SCHEMA message: ${JSON.stringify(message)}`)
             }
@@ -378,7 +379,8 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
             return false;
         }
         const batchedRecords = stream.getBatchedRowCount()
-        if (stream.getReplicationMethod() === "INCREMENTAL" && batchedRecords > 1_000_000) {
+        const method = stream.getReplicationMethod();
+        if ((method === "INCREMENTAL" || method === "APPEND") && batchedRecords > 1_000_000) {
             logger.info(`🧊 Stream=${streamId} has reached the maximum amount of batched records. We'll trigger a flush of ALL streams in the Warehouse.`)
             return true;
         } else {

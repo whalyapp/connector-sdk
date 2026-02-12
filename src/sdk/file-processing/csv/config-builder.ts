@@ -18,7 +18,7 @@ import { createCsvStreamConfig } from "../file-stream";
  *   .separator(";")
  *   .encoding("latin1")
  *   .addSyncedAtColumn()
- *   .fieldsFromHeaders({
+ *   .fieldsFromDict({
  *     "Product ID":   { key: "product_id",   type: "STRING" },
  *     "Product Name": { key: "product_name", type: "STRING" },
  *     "Price":        { key: "price",        type: "FLOAT" },
@@ -31,7 +31,7 @@ export class CsvExtractionConfigBuilder {
     private _encoding?: string;
     private _addSyncedAtColumn?: boolean;
     private _fields?: CsvFieldsConfig;
-    private _fieldsMode?: "headers" | "positions";
+    private _fieldsMode?: "dict" | "array";
     private _replicationMethod?: ReplicationMethod;
     private _primaryKeys?: string[];
 
@@ -54,30 +54,30 @@ export class CsvExtractionConfigBuilder {
         return this;
     }
 
-    fieldsFromHeaders(mapping: {
+    fieldsFromDict(mapping: {
         [header: string]: {
             key: string;
             valueTransformer?: (val: any) => string;
             type: FieldType;
         };
     }): CsvExtractionConfigBuilder {
-        if (this._fieldsMode === "positions") {
-            throw new Error("Cannot use fieldsFromHeaders after fieldsFromPositions");
+        if (this._fieldsMode === "array") {
+            throw new Error("Cannot use fieldsFromDict after fieldsFromArray");
         }
-        this._fieldsMode = "headers";
+        this._fieldsMode = "dict";
         this._fields = mapping as CsvFieldsDictConfig;
         return this;
     }
 
-    fieldsFromPositions(fields: Array<{
+    fieldsFromArray(fields: Array<{
         key: string;
         valueTransformer?: (val: any) => string;
         type: FieldType;
     }>): CsvExtractionConfigBuilder {
-        if (this._fieldsMode === "headers") {
-            throw new Error("Cannot use fieldsFromPositions after fieldsFromHeaders");
+        if (this._fieldsMode === "dict") {
+            throw new Error("Cannot use fieldsFromArray after fieldsFromDict");
         }
-        this._fieldsMode = "positions";
+        this._fieldsMode = "array";
         this._fields = fields as CsvFieldsArrayConfig;
         return this;
     }
@@ -94,7 +94,7 @@ export class CsvExtractionConfigBuilder {
 
     build(): CsvFileConfig {
         if (!this._fields) {
-            throw new Error("Fields must be configured (use fieldsFromHeaders or fieldsFromPositions)");
+            throw new Error("Fields must be configured (use fieldsFromDict or fieldsFromArray)");
         }
 
         if (Array.isArray(this._fields) && this._fields.length === 0) {

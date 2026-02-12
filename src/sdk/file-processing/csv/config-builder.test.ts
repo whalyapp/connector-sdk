@@ -4,10 +4,10 @@ import { ReplicationMethod } from "../../models/replication";
 import { FileFormat } from "../types";
 
 describe("CsvExtractionConfigBuilder", () => {
-  describe("fieldsFromHeaders (dict-style)", () => {
+  describe("fieldsFromDict", () => {
     it("builds a config with dict-style fields", () => {
       const config = CsvExtractionConfigBuilder.create()
-        .fieldsFromHeaders({
+        .fieldsFromDict({
           "Product ID": { key: "product_id", type: "STRING" },
           "Price":      { key: "price",      type: "FLOAT" },
         })
@@ -23,10 +23,10 @@ describe("CsvExtractionConfigBuilder", () => {
     });
   });
 
-  describe("fieldsFromPositions (array-style)", () => {
+  describe("fieldsFromArray", () => {
     it("builds a config with array-style fields", () => {
       const config = CsvExtractionConfigBuilder.create()
-        .fieldsFromPositions([
+        .fieldsFromArray([
           { key: "col_a", type: "STRING" },
           { key: "col_b", type: "FLOAT" },
         ])
@@ -41,7 +41,7 @@ describe("CsvExtractionConfigBuilder", () => {
     it("applies custom separator", () => {
       const config = CsvExtractionConfigBuilder.create()
         .separator(";")
-        .fieldsFromHeaders({ "Col": { key: "col", type: "STRING" } })
+        .fieldsFromDict({ "Col": { key: "col", type: "STRING" } })
         .build();
 
       expect(config.separator).toBe(";");
@@ -50,7 +50,7 @@ describe("CsvExtractionConfigBuilder", () => {
     it("applies custom encoding", () => {
       const config = CsvExtractionConfigBuilder.create()
         .encoding("latin1")
-        .fieldsFromHeaders({ "Col": { key: "col", type: "STRING" } })
+        .fieldsFromDict({ "Col": { key: "col", type: "STRING" } })
         .build();
 
       expect(config.encoding).toBe("latin1");
@@ -61,7 +61,7 @@ describe("CsvExtractionConfigBuilder", () => {
     it("enables synced-at column by default", () => {
       const config = CsvExtractionConfigBuilder.create()
         .addSyncedAtColumn()
-        .fieldsFromHeaders({ "Col": { key: "col", type: "STRING" } })
+        .fieldsFromDict({ "Col": { key: "col", type: "STRING" } })
         .build();
 
       expect(config.addSyncedAtColumn).toBe(true);
@@ -70,7 +70,7 @@ describe("CsvExtractionConfigBuilder", () => {
     it("can be explicitly disabled", () => {
       const config = CsvExtractionConfigBuilder.create()
         .addSyncedAtColumn(false)
-        .fieldsFromHeaders({ "Col": { key: "col", type: "STRING" } })
+        .fieldsFromDict({ "Col": { key: "col", type: "STRING" } })
         .build();
 
       expect(config.addSyncedAtColumn).toBe(false);
@@ -80,7 +80,7 @@ describe("CsvExtractionConfigBuilder", () => {
   describe("buildStreamConfig", () => {
     it("creates a FileStreamConfig with defaults", () => {
       const streamConfig = CsvExtractionConfigBuilder.create()
-        .fieldsFromHeaders({
+        .fieldsFromDict({
           "ID":   { key: "id",   type: "STRING" },
           "Name": { key: "name", type: "STRING" },
         })
@@ -93,7 +93,7 @@ describe("CsvExtractionConfigBuilder", () => {
 
     it("uses custom replicationMethod and primaryKeys", () => {
       const streamConfig = CsvExtractionConfigBuilder.create()
-        .fieldsFromHeaders({
+        .fieldsFromDict({
           "ID":   { key: "id",   type: "STRING" },
           "Name": { key: "name", type: "STRING" },
         })
@@ -116,7 +116,7 @@ describe("CsvExtractionConfigBuilder", () => {
     it("throws when dict-style fields are empty", () => {
       expect(() =>
         CsvExtractionConfigBuilder.create()
-          .fieldsFromHeaders({})
+          .fieldsFromDict({})
           .build()
       ).toThrow(/Fields must not be empty/);
     });
@@ -124,25 +124,25 @@ describe("CsvExtractionConfigBuilder", () => {
     it("throws when array-style fields are empty", () => {
       expect(() =>
         CsvExtractionConfigBuilder.create()
-          .fieldsFromPositions([])
+          .fieldsFromArray([])
           .build()
       ).toThrow(/Fields must not be empty/);
     });
 
-    it("throws when fieldsFromHeaders called after fieldsFromPositions", () => {
+    it("throws when fieldsFromDict called after fieldsFromArray", () => {
       expect(() =>
         CsvExtractionConfigBuilder.create()
-          .fieldsFromPositions([{ key: "a", type: "STRING" }])
-          .fieldsFromHeaders({ "A": { key: "a", type: "STRING" } })
-      ).toThrow(/Cannot use fieldsFromHeaders after fieldsFromPositions/);
+          .fieldsFromArray([{ key: "a", type: "STRING" }])
+          .fieldsFromDict({ "A": { key: "a", type: "STRING" } })
+      ).toThrow(/Cannot use fieldsFromDict after fieldsFromArray/);
     });
 
-    it("throws when fieldsFromPositions called after fieldsFromHeaders", () => {
+    it("throws when fieldsFromArray called after fieldsFromDict", () => {
       expect(() =>
         CsvExtractionConfigBuilder.create()
-          .fieldsFromHeaders({ "A": { key: "a", type: "STRING" } })
-          .fieldsFromPositions([{ key: "a", type: "STRING" }])
-      ).toThrow(/Cannot use fieldsFromPositions after fieldsFromHeaders/);
+          .fieldsFromDict({ "A": { key: "a", type: "STRING" } })
+          .fieldsFromArray([{ key: "a", type: "STRING" }])
+      ).toThrow(/Cannot use fieldsFromArray after fieldsFromDict/);
     });
   });
 });

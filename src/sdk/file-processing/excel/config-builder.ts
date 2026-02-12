@@ -9,9 +9,18 @@ import {
 
 /**
  * Builder pattern for creating Excel configurations.
+ *
+ * Sensible defaults:
+ * - fileNameValidator: accepts all files
+ * - fileNameVariablesExtractor: extracts nothing
+ * - replicationMethod: FULL_TABLE
  */
 export class ExcelExtractionConfigBuilder {
-    private config: Partial<ExcelExtractionConfig> = {};
+    private config: Partial<ExcelExtractionConfig> = {
+        fileNameValidator: () => true,
+        fileNameVariablesExtractor: () => ({}),
+        replicationMethod: ReplicationMethod.FULL_TABLE,
+    };
 
     static create(): ExcelExtractionConfigBuilder {
         return new ExcelExtractionConfigBuilder();
@@ -69,6 +78,40 @@ export class ExcelExtractionConfigBuilder {
     build(): ExcelExtractionConfig {
         if (!this.config.type) {
             throw new Error("Configuration type must be specified (singleSheet or processor)");
+        }
+
+        if (!this.config.extension) {
+            throw new Error("Extension must be set");
+        }
+
+        if (!this.config.tableName) {
+            throw new Error("Table name must be set");
+        }
+
+        if (!this.config.replicationMethod) {
+            throw new Error("Replication method must be set");
+        }
+
+        if (typeof this.config.fileNameValidator !== "function") {
+            throw new Error("fileNameValidator must be a function");
+        }
+
+        if (typeof this.config.fileNameVariablesExtractor !== "function") {
+            throw new Error("fileNameVariablesExtractor must be a function");
+        }
+
+        if (this.config.type === "single-sheet-extraction") {
+            const singleSheetConfig = this.config as Partial<ExcelSingleSheetExtractionConfig>;
+            if (!singleSheetConfig.columns || Object.keys(singleSheetConfig.columns).length === 0) {
+                throw new Error("Columns must be set with at least one column for single-sheet-extraction");
+            }
+        }
+
+        if (this.config.type === "processor") {
+            const processorConfig = this.config as Partial<ExcelCustomExtractorConfig>;
+            if (typeof processorConfig.processor !== "function") {
+                throw new Error("Processor function must be set for processor configs");
+            }
         }
 
         return this.config as ExcelExtractionConfig;

@@ -11,6 +11,7 @@ export * from "./excel/config-builder";
 // CSV
 export * from "./csv/reader";
 export * from "./csv/writer";
+export * from "./csv/config-builder";
 
 // File stream & tap
 export * from "./file-stream";

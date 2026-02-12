@@ -1,6 +1,6 @@
 {
   "name": "@whaly/connector-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -27,7 +27,9 @@
     "build": "tsup src/index.ts --format cjs,esm --dts --sourcemap --clean",
     "prepack": "npm run build",
     "clean": "rimraf dist",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
@@ -48,25 +50,34 @@
     "axios": "^1.13.0",
     "axios-retry": "^4.5.0",
     "bluebird": "^3.7.2",
+    "csv-parser": "^3.2.0",
+    "csv-writer": "^1.6.0",
+    "dayjs": "^1.11.13",
     "decimal.js": "^10.6.0",
+    "decompress": "^4.2.1",
     "dependency-graph": "^1.0.0",
     "fs-extra": "^11.3.2",
+    "iconv-lite": "^0.6.3",
     "jsonschema": "^1.5.0",
     "lodash": "^4.17.21",
-    "dayjs": "^1.11.13",
     "qs": "^6.13.0",
-    "winston": "^3.18.3"
+    "ssh2-sftp-client": "^12.0.0",
+    "winston": "^3.18.3",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@types/async-retry": "^1.4.9",
     "@types/bluebird": "^3.5.42",
+    "@types/decompress": "^4.2.7",
     "@types/fs-extra": "^11.0.4",
     "@types/lodash": "^4.17.20",
     "@types/node": "^24.9.1",
     "@types/qs": "^6.14.0",
+    "@types/ssh2-sftp-client": "^9.0.4",
     "@types/uuid": "^10.0.0",
     "rimraf": "^5.0.10",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }

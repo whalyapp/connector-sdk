@@ -1,6 +1,7 @@
 import { ReplicationMethodMessage, RecordMessage, SchemaMessage, StateMessage } from "../messages";
 import { TargetSchemaHook, TargetSchemaHookInput } from "./targetHook";
-import { Validator } from "jsonschema";
+import Ajv from "ajv";
+import addFormats from "ajv-formats";
 import dayjs, { Dayjs } from "dayjs";
 import { RenameColumnStore, SafeColumnNameConverterFn } from "./renameColumnStore";
 import { StreamState } from "./streamDbState";
@@ -38,8 +39,8 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
         [streamName: string]: StreamState
     }
 
-    // JSON Schema validator
-    validator: Validator
+    // JSON Schema validator (ajv — pre-compiles schemas into optimized JS functions)
+    ajv: Ajv
 
     constructor(config: C, stateProvider: StateProvider) {
         this.config = config;
@@ -51,7 +52,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
         this.batchedState = {}
         this.flushedState = {}
 
-        this.validator = new Validator();
+        this.ajv = addFormats(new Ajv({ allErrors: true, strict: false }));
         this.syncTime = dayjs();
 
         this.renameColumnStore = new RenameColumnStore()
@@ -152,12 +153,16 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
             }
 
             // To avoid getting any conflicts when loading data in the warehouse, we run a semaphore to have a concurrency of 1
-            await semaphore.runExclusive(async () => {
-                const shouldUploadIntermediateBatch = this.shouldUploadIntermediateBatch(streamId)
-                if (shouldUploadIntermediateBatch) {
-                    await this.loadAllStreamsInWarehouse({ isFinalLoad: false })
-                }
-            })
+            // Only check every 10,000 rows to avoid semaphore acquisition overhead on every single row
+            // (intermediate batch threshold is 1,000,000 rows, so checking every 10,000 is more than sufficient)
+            if (stream.getBatchedRowCount() % 10_000 === 0) {
+                await semaphore.runExclusive(async () => {
+                    const shouldUploadIntermediateBatch = this.shouldUploadIntermediateBatch(streamId)
+                    if (shouldUploadIntermediateBatch) {
+                        await this.loadAllStreamsInWarehouse({ isFinalLoad: false })
+                    }
+                })
+            }
 
             const record = message.record;
             const schema = stream.getSchema();
@@ -171,14 +176,15 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
 
             const recordWithWhalyFields = addWhalyFields(recordWithoutParasiteProperties, stream.getBatchDate());
 
-            // Checking that the RECORD is valid compared to the previously received SCHEMA
-            const validationResult = this.validator.validate(recordWithWhalyFields, schema);
-            if (!validationResult.valid) {
+            // Checking that the RECORD is valid compared to the previously received SCHEMA.
+            // Uses a pre-compiled ajv ValidateFunction (compiled once in schema()) for maximum throughput.
+            const validateFn = stream.getCompiledValidateFn();
+            if (validateFn && !validateFn(recordWithWhalyFields)) {
                 throw new SchemaValidationError(`Stream: ${streamId} - Record is not valid according to schema.
-                Validation errors: ${JSON.stringify(validationResult.errors)}
+                Validation errors: ${JSON.stringify(validateFn.errors)}
 
                 Record: ${JSON.stringify(recordWithoutParasiteProperties)}
-                Schema: ${JSON.stringify(stream.getSchema())}`, streamId, validationResult.errors)
+                Schema: ${JSON.stringify(stream.getSchema())}`, streamId, validateFn.errors ?? [])
             }
 
             // Making sure that the date are in valid range supported by Warehouse
@@ -299,6 +305,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
             })
 
             streamState.setSchema(schema);
+            streamState.setCompiledValidateFn(this.ajv.compile({ type: "object", properties: schema }));
 
             const streamReplicationMethod = this.streams[streamId]?.getReplicationMethod();
             if (message.keyProperties.length === 0 && streamReplicationMethod !== ReplicationMethod.APPEND) {

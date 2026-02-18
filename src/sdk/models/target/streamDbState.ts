@@ -6,6 +6,7 @@ import { StreamWarehouseSyncService } from "./dbSync";
 import { FlattenedSchema, TempFile } from "./models";
 import { createTemporaryFileStream } from "./temporaryFile";
 import * as fs from "fs";
+import { ValidateFunction } from "ajv";
 
 // This class is here to manage the State of a stream being loaded into a Warehouse
 export class StreamState {
@@ -30,6 +31,9 @@ export class StreamState {
 
     replicationMethod: ReplicationMethod
 
+    // Pre-compiled ajv ValidateFunction — compiled once per schema, reused for every row
+    compiledValidateFn?: ValidateFunction;
+
     constructor(
         streamId: StreamId, 
         dbSync: StreamWarehouseSyncService, 
@@ -53,6 +57,14 @@ export class StreamState {
 
     getSchema(): FlattenedSchema | undefined {
         return this.schema;
+    }
+
+    setCompiledValidateFn(fn: ValidateFunction) {
+        this.compiledValidateFn = fn;
+    }
+
+    getCompiledValidateFn(): ValidateFunction | undefined {
+        return this.compiledValidateFn;
     }
 
     getBatchDate(): string {

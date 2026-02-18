@@ -49,6 +49,8 @@ export async function* rowGeneratorFromCsv(
     fileConfig: CsvFileConfig,
 ): AsyncGenerator<Record<string, any>> {
     const isGeneratorConfigArray = Array.isArray(fileConfig.fields);
+    // Cache config keys once — avoids re-enumerating the same static object on every row
+    const configKeys = isGeneratorConfigArray ? [] : Object.keys(fileConfig.fields);
     const csvOptions: Record<string, any> = { separator: fileConfig.separator };
     if (isGeneratorConfigArray) {
         csvOptions.headers = false;
@@ -74,42 +76,50 @@ export async function* rowGeneratorFromCsv(
     try {
         for await (const row of Readable.from(csvStream)) {
             if (!isGeneratorConfigArray) {
-                const rowData = Object.keys(fileConfig.fields)
-                    .reduce((acc: Record<string, any>, key) => {
-                        const keyGenerator = (fileConfig.fields as CsvFieldsDictConfig)[key.trim()];
-                        if (!keyGenerator) {
-                            return acc;
-                        }
-                        return {
-                            ...acc,
-                            [keyGenerator.key]: keyGenerator.valueTransformer
-                                ? keyGenerator.valueTransformer(row[key])
-                                : row[key],
-                        };
-                    }, fileConfig.addSyncedAtColumn ? { _wly_synced_at: syncedAt } : {});
-
+                const rowData: Record<string, any> = fileConfig.addSyncedAtColumn ? { _wly_synced_at: syncedAt } : {};
+                for (const key of configKeys) {
+                    const keyGenerator = (fileConfig.fields as CsvFieldsDictConfig)[key.trim()];
+                    if (!keyGenerator) continue;
+                    rowData[keyGenerator.key] = keyGenerator.valueTransformer
+                        ? keyGenerator.valueTransformer(row[key])
+                        : row[key];
+                }
                 yield rowData;
             } else {
-                const rowData = Object.keys(row)
-                    .reduce((acc: Record<string, any>, key, i) => {
-                        const keyGenerator = (fileConfig.fields as CsvFieldsArrayConfig)[i];
-                        if (!keyGenerator) {
-                            return acc;
-                        }
-                        return {
-                            ...acc,
-                            [keyGenerator.key]: keyGenerator.valueTransformer
-                                ? keyGenerator.valueTransformer(row[i])
-                                : row[i],
-                        };
-                    }, fileConfig.addSyncedAtColumn ? { _wly_synced_at: syncedAt } : {});
-
+                const rowKeys = Object.keys(row);
+                const rowData: Record<string, any> = fileConfig.addSyncedAtColumn ? { _wly_synced_at: syncedAt } : {};
+                for (let i = 0; i < rowKeys.length; i++) {
+                    const keyGenerator = (fileConfig.fields as CsvFieldsArrayConfig)[i];
+                    if (!keyGenerator) continue;
+                    rowData[keyGenerator.key] = keyGenerator.valueTransformer
+                        ? keyGenerator.valueTransformer(row[i])
+                        : row[i];
+                }
                 yield rowData;
             }
         }
     } finally {
         initialReadStream.destroy();
     }
+}
+
+/**
+ * Counts data rows in a CSV file by scanning for newline bytes.
+ * Subtracts 1 for the header row. Fast: no CSV parsing required.
+ */
+export async function countCsvLines(filePath: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+        let newlines = 0;
+        createReadStream(filePath)
+            .on("data", (chunk: Buffer | string) => {
+                const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+                for (let i = 0; i < buf.length; i++) {
+                    if (buf[i] === 0x0a) newlines++;
+                }
+            })
+            .on("end", () => resolve(Math.max(0, newlines - 1)))
+            .on("error", reject);
+    });
 }
 
 /**

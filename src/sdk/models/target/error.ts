@@ -1,12 +1,12 @@
-import { ValidationError } from "jsonschema";
+import { ErrorObject } from "ajv";
 import { StreamId } from "../metadata";
 
 export class SchemaValidationError extends Error {
 
     streamId: StreamId;
-    validationErrors: ValidationError[];
+    validationErrors: ErrorObject[];
 
-    constructor(message: string, streamId: StreamId, errors: ValidationError[]) {
+    constructor(message: string, streamId: StreamId, errors: ErrorObject[]) {
         super(message); // (1)
         this.name = "SchemaValidationError"; // (2)
         this.streamId = streamId;

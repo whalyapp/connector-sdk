@@ -2,7 +2,7 @@ import { Storage, File } from "@google-cloud/storage";
 import { format } from "util";
 import * as pathModule from "path";
 import { existsSync, mkdirSync, unlinkSync } from "fs";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
 import { logger } from "../sdk/service/logger";
 
 const logPrefix = "[CloudStorageService]";
@@ -171,13 +171,16 @@ export class CloudStorageService {
 
     /**
      * Uploads a local file to the bucket with a unique name based on prefix, streamId, and UUID.
+     * Files are stored under `<prefix>/<run-id>/` when the RUN_ID env var is set,
+     * or `<prefix>/default/` otherwise.
      * Returns the GCS File reference.
      */
     async uploadFileWithUniqueName(filePath: string, prefix: string, streamId: string): Promise<File> {
         try {
             await this.bucket.get({ autoCreate: false });
 
-            const destinationFileName = `${prefix}/${streamId}-${uuidv4()}.jsonnl`;
+            const runFolder = process.env.RUN_ID ?? "default";
+            const destinationFileName = `${prefix}/${runFolder}/${streamId}-${randomUUID()}.jsonnl`;
 
             await this.bucket.upload(filePath, {
                 destination: destinationFileName

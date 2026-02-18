@@ -407,6 +407,10 @@ export abstract class Stream<O = any, C = any, P = undefined> {
                 metric.increment();
             })
             rowsSent += 1;
+
+            if (rowsSent % 1000 === 0) {
+                logger.info(`⏳ Stream: ${this.streamId} - ${rowsSent} records synced so far...`);
+            }
         }
 
         const stateServiceInst = StateService.getInstance();

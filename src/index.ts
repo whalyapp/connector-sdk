@@ -51,8 +51,20 @@ export * from "./sdk/file-processing/index";
 export * from "./services/sftp";
 export * from "./services/cloud-storage";
 export * from "./services/zip";
+export * from "./services/cdn";
+
+/**
+ * Asset Tap / Target (file-level pipeline)
+ */
+export * from "./sdk/models/asset-tap/types";
+export * from "./sdk/models/asset-tap/asset-stream";
+export * from "./sdk/models/asset-tap/asset-tap";
+export * from "./sdk/models/asset-tap/image-magick-transform";
+export * from "./sdk/models/asset-target/asset-target";
 
 /** The SDK is including some major targets and state providers implemantations */
 export * from "./targets/bigquery/main";
 export * from "./targets/bigquery/models/config";
+export * from "./targets/cdn/main";
+export * from "./targets/cdn/models/config";
 export * from "./state-providers/gcs/main";

@@ -59,7 +59,7 @@ export * from "./services/cdn";
 export * from "./sdk/models/asset-tap/types";
 export * from "./sdk/models/asset-tap/asset-stream";
 export * from "./sdk/models/asset-tap/asset-tap";
-export * from "./sdk/models/asset-tap/image-magick-transform";
+export * from "./sdk/models/asset-tap/image-transform";
 export * from "./sdk/models/asset-target/asset-target";
 
 /** The SDK is including some major targets and state providers implemantations */

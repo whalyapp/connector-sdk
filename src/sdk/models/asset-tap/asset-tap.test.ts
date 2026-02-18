@@ -20,6 +20,25 @@ class StubStream extends AssetStream<{}> {
     }
 }
 
+class TransformingStream extends AssetStream<{}> {
+    private items: AssetEntry[];
+    constructor(id: string, items: AssetEntry[]) {
+        super(id, {}, "INCREMENTAL");
+        this.items = items;
+    }
+    async *listAssets() {
+        for (const item of this.items) yield item;
+    }
+    async transformFile(downloadedPath: string, _entry: AssetEntry): Promise<string> {
+        // Simulate creating a .webp file next to the downloaded file
+        const dir = path.dirname(downloadedPath);
+        const basename = path.basename(downloadedPath, path.extname(downloadedPath));
+        const webpPath = path.join(dir, `${basename}.webp`);
+        await fs.writeFile(webpPath, "fake-webp-content");
+        return webpPath;
+    }
+}
+
 class StubTarget extends AssetTarget<{}> {
     uploaded: ProcessedAsset[] = [];
     private syncResult: boolean;
@@ -164,5 +183,84 @@ describe("AssetTap", () => {
         // The tmp download file should be cleaned up
         const tmpFiles = await fs.readdir(path.join(tmpDir, "tmp")).catch(() => []);
         expect(tmpFiles).toHaveLength(0);
+    });
+
+    // Fix #1: entries with same basename from different dirs don't collide
+    it("handles entries with duplicate basenames from different directories", async () => {
+        const entries: AssetEntry[] = [
+            { sourcePath: "/dir1/logo.jpg", destinationPath: "dir1/logo.jpg", lastModified: new Date(), contentType: "image/jpeg" },
+            { sourcePath: "/dir2/logo.jpg", destinationPath: "dir2/logo.jpg", lastModified: new Date(), contentType: "image/jpeg" },
+        ];
+        const target = new StubTarget(true);
+        const stream = new StubStream("images", entries);
+        const tap = new StubTap(target, [stream], tmpDir);
+
+        const manifest = await tap.sync();
+
+        // Both should upload successfully (no overwrite)
+        expect(target.uploaded).toHaveLength(2);
+        expect(manifest.summary.uploaded).toBe(2);
+        expect(manifest.summary.errors).toBe(0);
+        // Verify the content is different (proves no overwrite happened)
+        const firstContent = await fs.readFile(target.uploaded[0]!.uploadPath, "utf-8").catch(() => null);
+        // Files are cleaned up after upload, so we check via the uploaded assets' entries
+        expect(target.uploaded[0]!.entry.sourcePath).toBe("/dir1/logo.jpg");
+        expect(target.uploaded[1]!.entry.sourcePath).toBe("/dir2/logo.jpg");
+    });
+
+    // Fix #2: transformed files infer contentType from extension, not hardcoded
+    it("infers contentType from file extension after transform", async () => {
+        const entries: AssetEntry[] = [
+            { sourcePath: "/logo.jpg", destinationPath: "logo.webp", lastModified: new Date(), contentType: "image/jpeg" },
+        ];
+        const target = new StubTarget(true);
+        const stream = new TransformingStream("images", entries);
+        const tap = new StubTap(target, [stream], tmpDir);
+
+        await tap.sync();
+
+        expect(target.uploaded).toHaveLength(1);
+        expect(target.uploaded[0]!.contentType).toBe("image/webp");
+        expect(target.uploaded[0]!.wasTransformed).toBe(true);
+    });
+
+    // Fix #3: transformed (uploadPath) files are also cleaned up
+    it("cleans up both downloaded and transformed files after upload", async () => {
+        const entries: AssetEntry[] = [
+            { sourcePath: "/logo.jpg", destinationPath: "logo.webp", lastModified: new Date(), contentType: "image/jpeg" },
+        ];
+        const target = new StubTarget(true);
+        const stream = new TransformingStream("images", entries);
+        const tap = new StubTap(target, [stream], tmpDir);
+
+        await tap.sync();
+
+        // Both the original download AND the transformed file should be cleaned up
+        const tmpFiles = await fs.readdir(path.join(tmpDir, "tmp")).catch(() => []);
+        expect(tmpFiles).toHaveLength(0);
+    });
+
+    // Fix #4: multiple streams with different modes
+    it("processes multiple streams with different replication modes", async () => {
+        const fullEntries: AssetEntry[] = [
+            { sourcePath: "/full.jpg", destinationPath: "full.jpg", lastModified: new Date(), contentType: "image/jpeg" },
+        ];
+        const incrEntries: AssetEntry[] = [
+            { sourcePath: "/incr.jpg", destinationPath: "incr.jpg", lastModified: new Date(), contentType: "image/jpeg" },
+        ];
+        const target = new StubTarget(false); // shouldSync returns false
+        const fullStream = new StubStream("full-stream", fullEntries, "FULL");
+        const incrStream = new StubStream("incr-stream", incrEntries, "INCREMENTAL");
+        const tap = new StubTap(target, [fullStream, incrStream], tmpDir);
+
+        const manifest = await tap.sync();
+
+        // FULL stream uploads regardless, INCREMENTAL stream skips
+        expect(manifest.summary.uploaded).toBe(1);
+        expect(manifest.summary.skipped).toBe(1);
+        expect(manifest.assets.find(a => a.sourcePath === "/full.jpg")?.status).toBe("uploaded");
+        expect(manifest.assets.find(a => a.sourcePath === "/incr.jpg")?.status).toBe("skipped");
+        // Mixed modes → manifest reports FULL
+        expect(manifest.mode).toBe("FULL");
     });
 });

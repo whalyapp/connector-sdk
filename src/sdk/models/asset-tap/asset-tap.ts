@@ -3,9 +3,34 @@ import path from "node:path";
 import { logger } from "../../service/logger";
 import type { AssetTarget } from "../asset-target/asset-target";
 import type { AssetStream } from "./asset-stream";
-import type { AssetEntry, AssetManifest, AssetManifestEntry, ProcessedAsset } from "./types";
+import type { AssetEntry, AssetManifest, AssetManifestEntry, AssetReplicationMode, ProcessedAsset } from "./types";
 
 const logPrefix = "[AssetTap]";
+
+const MIME_BY_EXT: Record<string, string> = {
+    ".webp": "image/webp",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".svg": "image/svg+xml",
+    ".avif": "image/avif",
+    ".pdf": "application/pdf",
+};
+
+function inferContentType(filePath: string, fallback: string): string {
+    const ext = path.extname(filePath).toLowerCase();
+    return MIME_BY_EXT[ext] ?? fallback;
+}
+
+function deriveManifestMode(streams: AssetStream<unknown>[]): AssetReplicationMode {
+    const modes = new Set(streams.map(s => s.replicationMode));
+    if (modes.size > 1) {
+        logger.warn(`${logPrefix} Streams have mixed replication modes (${[...modes].join(", ")}). Manifest will report "FULL".`);
+        return "FULL";
+    }
+    return streams[0]?.replicationMode ?? "INCREMENTAL";
+}
 
 export abstract class AssetTap<C> {
     readonly config: C;
@@ -36,6 +61,7 @@ export abstract class AssetTap<C> {
         await fs.ensureDir(tmpDir);
 
         const assetEntries: AssetManifestEntry[] = [];
+        let entryIndex = 0;
 
         for (const stream of this.streams) {
             logger.info(`${logPrefix} Processing stream: ${stream.streamId} (mode=${stream.replicationMode})`);
@@ -62,13 +88,17 @@ export abstract class AssetTap<C> {
                     }
                 }
 
-                const fileName = path.basename(entry.sourcePath);
+                // Use counter prefix to avoid basename collisions
+                // (e.g. /dir1/logo.jpg and /dir2/logo.jpg both have basename "logo.jpg")
+                const fileName = `${entryIndex}_${path.basename(entry.sourcePath)}`;
                 const downloadedPath = path.join(tmpDir, fileName);
+                let uploadPath = downloadedPath;
+                entryIndex++;
 
                 try {
                     await this.downloadEntry(entry, downloadedPath);
 
-                    const uploadPath = await stream.transformFile(downloadedPath, entry);
+                    uploadPath = await stream.transformFile(downloadedPath, entry);
                     const wasTransformed = uploadPath !== downloadedPath;
 
                     const stat = await fs.stat(uploadPath);
@@ -78,7 +108,9 @@ export abstract class AssetTap<C> {
                         uploadPath,
                         wasTransformed,
                         size: stat.size,
-                        contentType: wasTransformed ? "image/webp" : entry.contentType,
+                        contentType: wasTransformed
+                            ? inferContentType(uploadPath, entry.contentType)
+                            : entry.contentType,
                     };
 
                     await this.target.uploadAsset(processed);
@@ -108,7 +140,12 @@ export abstract class AssetTap<C> {
                         error: message,
                     });
                 } finally {
+                    // Clean up downloaded file
                     await fs.remove(downloadedPath).catch(() => undefined);
+                    // If transform produced a different file, clean that up too
+                    if (uploadPath !== downloadedPath) {
+                        await fs.remove(uploadPath).catch(() => undefined);
+                    }
                 }
             }
         }
@@ -122,7 +159,7 @@ export abstract class AssetTap<C> {
 
         const manifest: AssetManifest = {
             syncedAt: new Date().toISOString(),
-            mode: this.streams[0]?.replicationMode ?? "INCREMENTAL",
+            mode: deriveManifestMode(this.streams),
             assets: assetEntries,
             summary,
         };

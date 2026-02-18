@@ -172,7 +172,9 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
             const recordWithWhalyFields = addWhalyFields(recordWithoutParasiteProperties, stream.getBatchDate());
 
             // Checking that the RECORD is valid compared to the previously received SCHEMA
-            const validationResult = this.validator.validate(recordWithWhalyFields, schema);
+            // We wrap the FlattenedSchema in a proper JSON Schema object to avoid collisions
+            // between property names (e.g. "type") and JSON Schema keywords.
+            const validationResult = this.validator.validate(recordWithWhalyFields, { type: "object", properties: schema });
             if (!validationResult.valid) {
                 throw new SchemaValidationError(`Stream: ${streamId} - Record is not valid according to schema.
                 Validation errors: ${JSON.stringify(validationResult.errors)}

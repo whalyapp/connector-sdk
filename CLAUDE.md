@@ -26,8 +26,7 @@ Pipeline: **Tap → Stream → Target**
 - Tests colocated with source as `*.test.ts`
 - No linter/formatter configured — match surrounding code style
 
-## Tools
+## Tools (optional)
 
-**Serena MCP** is available in this project for semantic code navigation:
-use `find_symbol`, `find_referencing_symbols`, `replace_symbol_body`, etc.
-Prefer Serena's symbolic tools over raw file reads for code exploration and editing.
+If the **Serena MCP** plugin is active, prefer its symbolic tools over raw file reads:
+`find_symbol`, `find_referencing_symbols`, `replace_symbol_body`, etc.

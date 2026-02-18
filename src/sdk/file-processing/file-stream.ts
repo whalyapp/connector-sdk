@@ -12,7 +12,7 @@ import {
     CsvFileConfig,
 } from "./types";
 import { extractExcelRows } from "./excel/reader";
-import { rowGeneratorFromCsv } from "./csv/reader";
+import { rowGeneratorFromCsv, countCsvLines } from "./csv/reader";
 import { excelFieldsToJsonSchema, csvFieldsToJsonSchema, extractPrimaryKeysFromExcelFields, extractPrimaryKeysFromCsvConfig } from "./schema-utils";
 
 /**
@@ -64,8 +64,22 @@ export class FileStream extends Stream<Record<string, any>, FileStreamConfig> {
     /**
      * Yield records from all file(s).
      * When multiple file paths are provided, records are yielded sequentially from each file.
+     * Pre-counts total rows across all files to enable percentage progress logging.
      */
     async *_getRecords(): AsyncIterable<Record<string, any>> {
+        // Pre-count total rows across all files before yielding any record
+        let total = 0;
+        for (const filePath of this.localFilePaths) {
+            if (this.config.format === FileFormat.EXCEL) {
+                const data = await extractExcelRows(filePath, this.config.excel);
+                total += data.length;
+            } else if (this.config.format === FileFormat.CSV) {
+                total += await countCsvLines(filePath);
+            }
+        }
+        this.totalRows = total;
+
+        // Now yield records
         for (const filePath of this.localFilePaths) {
             if (this.config.format === FileFormat.EXCEL) {
                 const data = await extractExcelRows(filePath, this.config.excel);

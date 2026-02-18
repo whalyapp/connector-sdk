@@ -51,6 +51,9 @@ export abstract class Stream<O = any, C = any, P = undefined> {
 
     childConcurrency: number;
 
+    // Optional total row count for percentage progress logging
+    totalRows?: number;
+
     // Metrics configuration
     rowsSyncedMetricsConf: MetricConfiguration
     executionTimeMetricsConf: MetricConfiguration
@@ -409,7 +412,10 @@ export abstract class Stream<O = any, C = any, P = undefined> {
             rowsSent += 1;
 
             if (rowsSent % 1000 === 0) {
-                logger.info(`⏳ Stream: ${this.streamId} - ${rowsSent} records synced so far...`);
+                const percentStr = this.totalRows
+                    ? ` (${Math.round((rowsSent / this.totalRows) * 100)}%)`
+                    : "";
+                logger.info(`⏳ Stream: ${this.streamId} - ${rowsSent} records synced so far...${percentStr}`);
             }
         }
 

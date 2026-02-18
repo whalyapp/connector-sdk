@@ -104,6 +104,25 @@ export async function* rowGeneratorFromCsv(
 }
 
 /**
+ * Counts data rows in a CSV file by scanning for newline bytes.
+ * Subtracts 1 for the header row. Fast: no CSV parsing required.
+ */
+export async function countCsvLines(filePath: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+        let newlines = 0;
+        createReadStream(filePath)
+            .on("data", (chunk: Buffer | string) => {
+                const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+                for (let i = 0; i < buf.length; i++) {
+                    if (buf[i] === 0x0a) newlines++;
+                }
+            })
+            .on("end", () => resolve(Math.max(0, newlines - 1)))
+            .on("error", reject);
+    });
+}
+
+/**
  * Validates CSV header row against expected configuration.
  */
 export const checkCsvHeaderRow = async (

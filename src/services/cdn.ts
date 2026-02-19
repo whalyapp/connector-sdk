@@ -1,12 +1,13 @@
 import axios, { AxiosInstance } from "axios";
 import { logger } from "../sdk/service/logger";
+import { getApiEndpoint } from "../sdk/service/apiEndpoint";
 import { getServiceAccountKey } from "../sdk/service/serviceAccountKey";
 
 const logPrefix = "[CdnService]";
 
 export interface CdnServiceConfig {
     /** e.g. "https://org.my.whaly.io" */
-    apiEndpoint: string;
+    apiEndpoint?: string;
     /** e.g. "sk:xxxx" */
     serviceAccountKey?: string;
 }
@@ -28,8 +29,9 @@ export class CdnService {
 
     constructor(config: CdnServiceConfig) {
         const resolvedKey = getServiceAccountKey(config.serviceAccountKey);
+        const resolvedEndpoint = getApiEndpoint(config.apiEndpoint);
         this.axiosClient = axios.create({
-            baseURL: config.apiEndpoint,
+            baseURL: resolvedEndpoint,
             headers: {
                 Authorization: `Bearer ${resolvedKey}`,
                 Accept: "application/json",

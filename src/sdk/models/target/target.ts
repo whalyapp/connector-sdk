@@ -22,6 +22,7 @@ const semaphore = new Semaphore(1);
 export abstract class ITarget<C extends BaseConfig = BaseConfig> {
     config: C;
     syncedAtColumnName: string;
+    syncedAtColumnUseLegacyStringType: boolean;
     schemaHooks: TargetSchemaHook[]
     syncTime: Dayjs;
     stateProvider: StateProvider;
@@ -46,6 +47,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
     constructor(config: C, stateProvider: StateProvider) {
         this.config = config;
         this.syncedAtColumnName = config.syncedAtColumnName ?? DEFAULT_SYNCED_AT_COLUMN;
+        this.syncedAtColumnUseLegacyStringType = config.syncedAtColumnUseLegacyStringType ?? false;
         this.stateProvider = stateProvider;
         this.schemaHooks = [];
 
@@ -290,10 +292,9 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
             const schema = flattenSchema(streamId, message.schema);
 
             // Add synced-at column
-            schema[this.syncedAtColumnName] = {
-                format: "date-time",
-                type: ["null", "string"]
-            }
+            schema[this.syncedAtColumnName] = this.syncedAtColumnUseLegacyStringType
+                ? { type: ["null", "string"] }
+                : { format: "date-time", type: ["null", "string"] }
 
             const dbSync = streamState.getDbSync();
             Object.keys(schema).forEach(fieldUnsafeKey => {

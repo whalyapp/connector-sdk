@@ -39,4 +39,5 @@ export interface BaseConfig {
     database: string;
     schema: string;
     syncedAtColumnName?: string;
+    syncedAtColumnUseLegacyStringType?: boolean;
 }

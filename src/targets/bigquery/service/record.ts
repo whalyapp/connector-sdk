@@ -9,7 +9,9 @@ import { logger } from "../../../sdk/service/logger";
 export const validateDateRange = (record: any, schema: FlattenedSchema): any => {
 
     Object.keys(schema).forEach(key => {
-        const { format } = schema[key];
+        const field = schema[key];
+        if (!field) return;
+        const { format } = field;
 
         if (format === "date-time") {
             if (record[key]) {

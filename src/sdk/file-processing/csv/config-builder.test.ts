@@ -19,7 +19,6 @@ describe("CsvExtractionConfigBuilder", () => {
         "Price":      { key: "price",      type: "FLOAT" },
       });
       expect(config.encoding).toBeUndefined();
-      expect(config.addSyncedAtColumn).toBeUndefined();
     });
   });
 
@@ -54,26 +53,6 @@ describe("CsvExtractionConfigBuilder", () => {
         .build();
 
       expect(config.encoding).toBe("latin1");
-    });
-  });
-
-  describe("addSyncedAtColumn", () => {
-    it("enables synced-at column by default", () => {
-      const config = CsvExtractionConfigBuilder.create()
-        .addSyncedAtColumn()
-        .fieldsFromDict({ "Col": { key: "col", type: "STRING" } })
-        .build();
-
-      expect(config.addSyncedAtColumn).toBe(true);
-    });
-
-    it("can be explicitly disabled", () => {
-      const config = CsvExtractionConfigBuilder.create()
-        .addSyncedAtColumn(false)
-        .fieldsFromDict({ "Col": { key: "col", type: "STRING" } })
-        .build();
-
-      expect(config.addSyncedAtColumn).toBe(false);
     });
   });
 

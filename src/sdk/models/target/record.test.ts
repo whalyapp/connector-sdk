@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { removeParasiteProperties, addWhalyFields } from "./record";
-import { FlattenedSchema } from "./models";
+import { DEFAULT_SYNCED_AT_COLUMN, FlattenedSchema } from "./models";
 
 describe("removeParasiteProperties", () => {
   const schema: FlattenedSchema = {
@@ -30,17 +30,26 @@ describe("removeParasiteProperties", () => {
 });
 
 describe("addWhalyFields", () => {
-  it("adds _whaly_synced field", () => {
+  it("adds _wly_synced_at field by default", () => {
     const record = { id: "1" };
     const batchDate = "2024-06-15T12:00:00Z";
     const result = addWhalyFields(record, batchDate);
-    expect(result._whaly_synced).toBe(batchDate);
+    expect(result[DEFAULT_SYNCED_AT_COLUMN]).toBe(batchDate);
+    expect(result.id).toBe("1");
+  });
+
+  it("uses custom column name when provided", () => {
+    const record = { id: "1" };
+    const batchDate = "2024-06-15T12:00:00Z";
+    const result = addWhalyFields(record, batchDate, "synced_at");
+    expect(result.synced_at).toBe(batchDate);
+    expect(result[DEFAULT_SYNCED_AT_COLUMN]).toBeUndefined();
     expect(result.id).toBe("1");
   });
 
   it("does not mutate the original record", () => {
     const record = { id: "1" };
     addWhalyFields(record, "2024-06-15T12:00:00Z");
-    expect((record as any)._whaly_synced).toBeUndefined();
+    expect((record as any)[DEFAULT_SYNCED_AT_COLUMN]).toBeUndefined();
   });
 });

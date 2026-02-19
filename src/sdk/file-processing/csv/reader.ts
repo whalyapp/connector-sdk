@@ -56,7 +56,6 @@ export async function* rowGeneratorFromCsv(
         csvOptions.headers = false;
     }
     const csvStream = csv(csvOptions);
-    const syncedAt = new Date().toISOString();
 
     let initialReadStream: FsReadStream;
     let finalInputStream: NodeJS.ReadableStream;
@@ -76,7 +75,7 @@ export async function* rowGeneratorFromCsv(
     try {
         for await (const row of Readable.from(csvStream)) {
             if (!isGeneratorConfigArray) {
-                const rowData: Record<string, any> = fileConfig.addSyncedAtColumn ? { _wly_synced_at: syncedAt } : {};
+                const rowData: Record<string, any> = {};
                 for (const key of configKeys) {
                     const keyGenerator = (fileConfig.fields as CsvFieldsDictConfig)[key.trim()];
                     if (!keyGenerator) continue;
@@ -88,7 +87,7 @@ export async function* rowGeneratorFromCsv(
                 yield rowData;
             } else {
                 const rowKeys = Object.keys(row);
-                const rowData: Record<string, any> = fileConfig.addSyncedAtColumn ? { _wly_synced_at: syncedAt } : {};
+                const rowData: Record<string, any> = {};
                 for (let i = 0; i < rowKeys.length; i++) {
                     const keyGenerator = (fileConfig.fields as CsvFieldsArrayConfig)[i];
                     if (!keyGenerator) continue;

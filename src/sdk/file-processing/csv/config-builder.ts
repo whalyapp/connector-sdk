@@ -17,7 +17,6 @@ import { createCsvStreamConfig } from "../file-stream";
  * const config = CsvExtractionConfigBuilder.create()
  *   .separator(";")
  *   .encoding("latin1")
- *   .addSyncedAtColumn()
  *   .fieldsFromDict({
  *     "Product ID":   { key: "product_id",   type: "STRING" },
  *     "Product Name": { key: "product_name", type: "STRING" },
@@ -29,7 +28,7 @@ import { createCsvStreamConfig } from "../file-stream";
 export class CsvExtractionConfigBuilder {
     private _separator: string = ",";
     private _encoding?: string;
-    private _addSyncedAtColumn?: boolean;
+
     private _fields?: CsvFieldsConfig;
     private _fieldsMode?: "dict" | "array";
     private _replicationMethod?: ReplicationMethod;
@@ -46,11 +45,6 @@ export class CsvExtractionConfigBuilder {
 
     encoding(enc: string): CsvExtractionConfigBuilder {
         this._encoding = enc;
-        return this;
-    }
-
-    addSyncedAtColumn(enabled: boolean = true): CsvExtractionConfigBuilder {
-        this._addSyncedAtColumn = enabled;
         return this;
     }
 
@@ -114,9 +108,6 @@ export class CsvExtractionConfigBuilder {
             config.encoding = this._encoding;
         }
 
-        if (this._addSyncedAtColumn !== undefined) {
-            config.addSyncedAtColumn = this._addSyncedAtColumn;
-        }
 
         return config;
     }

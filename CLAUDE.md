@@ -1,5 +1,8 @@
 # connector-sdk
 
+There is a .nvmrc file in the root of the repository that specifies the version of Node.js to use.
+Be sure to use the correct version of Node.js.
+
 ## Commands
 
 ```bash

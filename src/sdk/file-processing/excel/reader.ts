@@ -97,7 +97,7 @@ export const createCellReference = (columnIndex: number, rowIndex: number): stri
 const extractSingleSheetRows = async (
     fileName: string,
     conf: ExcelSingleSheetExtractionConfig,
-): Promise<Record<string, string>[]> => {
+): Promise<Record<string, string | null>[]> => {
     console.log("Extracting single sheet rows from file: %s", fileName);
     const workbook = XLSX.readFile(fileName, { dense: true });
     const sheetKeys = Object.keys(workbook.Sheets);
@@ -117,7 +117,7 @@ const extractSingleSheetRows = async (
     }
 
     const variables = conf.fileNameVariablesExtractor(fileName, workbook);
-    const data: Record<string, string>[] = [];
+    const data: Record<string, string | null>[] = [];
     let rowIdx = 0;
 
     // Find minimum column index to determine when to stop processing
@@ -144,15 +144,15 @@ const extractSingleSheetRows = async (
             break;
         }
 
-        const rowData = Object.entries(conf.columns).reduce<{ [key: string]: string }>((acc, [key, column]) => {
+        const rowData = Object.entries(conf.columns).reduce<{ [key: string]: string | null }>((acc, [key, column]) => {
             if ((column as ExcelDerivedField).variableName) {
                 if (!variables) {
                     throw new Error(`No variables extracted from filename, cannot extract derived field ${key}`);
                 }
-                acc[key] = variables[(column as ExcelDerivedField).variableName] || "";
+                acc[key] = variables[(column as ExcelDerivedField).variableName] || null;
             } else {
                 const colIndex = excelColumnToIndex((column as ExcelSourceColumn).column);
-                acc[key] = (row[colIndex]?.v as string) || "";
+                acc[key] = (row[colIndex]?.v as string) || null;
             }
             return acc;
         }, {});
@@ -170,8 +170,8 @@ const extractSingleSheetRows = async (
 export const extractExcelRows = async (
     localFilePath: string,
     conf: ExcelExtractionConfig,
-): Promise<Record<string, string>[]> => {
-    let data: Record<string, string>[];
+): Promise<Record<string, string | null>[]> => {
+    let data: Record<string, string | null>[];
 
     if (conf.type === "single-sheet-extraction") {
         data = await extractSingleSheetRows(localFilePath, conf);
@@ -259,7 +259,7 @@ export const findAllMatchingConfigs = (
  * Creates an async generator from Excel data.
  */
 export async function* createExcelGenerator(
-    data: Record<string, string>[],
+    data: Record<string, string | null>[],
 ): AsyncGenerator<Record<string, any>, void, unknown> {
     for (const row of data) {
         yield row;

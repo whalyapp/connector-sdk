@@ -80,9 +80,10 @@ export async function* rowGeneratorFromCsv(
                 for (const key of configKeys) {
                     const keyGenerator = (fileConfig.fields as CsvFieldsDictConfig)[key.trim()];
                     if (!keyGenerator) continue;
-                    rowData[keyGenerator.key] = keyGenerator.valueTransformer
+                    const rawValue = keyGenerator.valueTransformer
                         ? keyGenerator.valueTransformer(row[key])
                         : row[key];
+                    rowData[keyGenerator.key] = rawValue === "" ? null : rawValue;
                 }
                 yield rowData;
             } else {
@@ -91,9 +92,10 @@ export async function* rowGeneratorFromCsv(
                 for (let i = 0; i < rowKeys.length; i++) {
                     const keyGenerator = (fileConfig.fields as CsvFieldsArrayConfig)[i];
                     if (!keyGenerator) continue;
-                    rowData[keyGenerator.key] = keyGenerator.valueTransformer
+                    const rawValue = keyGenerator.valueTransformer
                         ? keyGenerator.valueTransformer(row[i])
                         : row[i];
+                    rowData[keyGenerator.key] = rawValue === "" ? null : rawValue;
                 }
                 yield rowData;
             }

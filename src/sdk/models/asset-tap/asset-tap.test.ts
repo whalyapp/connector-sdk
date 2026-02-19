@@ -18,6 +18,11 @@ class StubStream extends AssetStream<{}> {
     async *listAssets() {
         for (const item of this.items) yield item;
     }
+
+    async downloadEntry(entry: AssetEntry, destPath: string): Promise<void> {
+        await fs.ensureDir(path.dirname(destPath));
+        await fs.writeFile(destPath, `content-of-${path.basename(entry.sourcePath)}`);
+    }
 }
 
 class TransformingStream extends AssetStream<{}> {
@@ -28,6 +33,11 @@ class TransformingStream extends AssetStream<{}> {
     }
     async *listAssets() {
         for (const item of this.items) yield item;
+    }
+
+    async downloadEntry(entry: AssetEntry, destPath: string): Promise<void> {
+        await fs.ensureDir(path.dirname(destPath));
+        await fs.writeFile(destPath, `content-of-${path.basename(entry.sourcePath)}`);
     }
     async transformFile(downloadedPath: string, _entry: AssetEntry): Promise<string> {
         // Simulate creating a .webp file next to the downloaded file
@@ -61,12 +71,6 @@ class StubTap extends AssetTap<{}> {
 
     async init() {
         for (const s of this.stubStreams) this.streams.push(s);
-    }
-
-    // Override download to write a fixture file instead of hitting a real source
-    protected async downloadEntry(entry: AssetEntry, destPath: string): Promise<void> {
-        await fs.ensureDir(path.dirname(destPath));
-        await fs.writeFile(destPath, `content-of-${path.basename(entry.sourcePath)}`);
     }
 }
 

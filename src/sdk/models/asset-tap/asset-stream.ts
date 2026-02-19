@@ -13,6 +13,12 @@ export abstract class AssetStream<C> {
 
     abstract listAssets(): AsyncIterable<AssetEntry>;
 
+    /**
+     * Download a single source entry to `destPath` on local disk.
+     * Override this in concrete streams to pull from SFTP, API, etc.
+     */
+    abstract downloadEntry(entry: AssetEntry, destPath: string): Promise<void>;
+
     async transformFile(downloadedPath: string, _entry: AssetEntry): Promise<string> {
         return downloadedPath;
     }

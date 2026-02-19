@@ -48,12 +48,6 @@ export abstract class AssetTap<C> {
     /** Register streams. Called once at the start of sync(). */
     abstract init(): Promise<void>;
 
-    /**
-     * Download a single source entry to `destPath` on local disk.
-     * Override this in concrete taps to pull from SFTP, API, etc.
-     */
-    protected abstract downloadEntry(entry: AssetEntry, destPath: string): Promise<void>;
-
     async sync(): Promise<AssetManifest> {
         await this.init();
 
@@ -96,7 +90,7 @@ export abstract class AssetTap<C> {
                 entryIndex++;
 
                 try {
-                    await this.downloadEntry(entry, downloadedPath);
+                    await stream.downloadEntry(entry, downloadedPath);
 
                     uploadPath = await stream.transformFile(downloadedPath, entry);
                     const wasTransformed = uploadPath !== downloadedPath;

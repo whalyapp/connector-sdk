@@ -32,8 +32,11 @@ export interface StreamWithTempFile {
     tempFile: TempFile
 }
 
+export const DEFAULT_SYNCED_AT_COLUMN = "_wly_synced_at";
+
 export interface BaseConfig {
     connector_id: string;
     database: string;
     schema: string;
+    syncedAtColumnName?: string;
 }

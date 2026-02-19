@@ -8,7 +8,7 @@ import { StreamState } from "./streamDbState";
 import { logger } from "../../service/logger";
 import { MissingSchemaError, SchemaValidationError } from "./error";
 import { addWhalyFields, removeParasiteProperties } from "./record";
-import { BaseConfig, FlattenedSchema } from "./models";
+import { BaseConfig, DEFAULT_SYNCED_AT_COLUMN, FlattenedSchema } from "./models";
 import { flattenSchema } from "./schema";
 import { StreamWarehouseSyncService } from "./dbSync";
 import { Semaphore } from "async-mutex";
@@ -21,6 +21,7 @@ const semaphore = new Semaphore(1);
 
 export abstract class ITarget<C extends BaseConfig = BaseConfig> {
     config: C;
+    syncedAtColumnName: string;
     schemaHooks: TargetSchemaHook[]
     syncTime: Dayjs;
     stateProvider: StateProvider;
@@ -44,6 +45,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
 
     constructor(config: C, stateProvider: StateProvider) {
         this.config = config;
+        this.syncedAtColumnName = config.syncedAtColumnName ?? DEFAULT_SYNCED_AT_COLUMN;
         this.stateProvider = stateProvider;
         this.schemaHooks = [];
 
@@ -92,8 +94,8 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
         let hasBreakingChanges = false;
 
         // Get all column names from both schemas
-        const prevColumns = new Set(Object.keys(previousSchema).filter(col => !col.startsWith("_whaly")));
-        const newColumns = new Set(Object.keys(newSchema).filter(col => !col.startsWith("_whaly")));
+        const prevColumns = new Set(Object.keys(previousSchema).filter(col => col !== this.syncedAtColumnName));
+        const newColumns = new Set(Object.keys(newSchema).filter(col => col !== this.syncedAtColumnName));
 
         // Check for new columns (non-breaking)
         for (const columnName of newColumns) {
@@ -174,7 +176,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
 
             const recordWithoutParasiteProperties = removeParasiteProperties(record, schema);
 
-            const recordWithWhalyFields = addWhalyFields(recordWithoutParasiteProperties, stream.getBatchDate());
+            const recordWithWhalyFields = addWhalyFields(recordWithoutParasiteProperties, stream.getBatchDate(), this.syncedAtColumnName);
 
             // Checking that the RECORD is valid compared to the previously received SCHEMA.
             // Uses a pre-compiled ajv ValidateFunction (compiled once in schema()) for maximum throughput.
@@ -287,8 +289,8 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
             }
             const schema = flattenSchema(streamId, message.schema);
 
-            // Add Whaly specific columns
-            schema["_whaly_synced"] = {
+            // Add synced-at column
+            schema[this.syncedAtColumnName] = {
                 format: "date-time",
                 type: ["null", "string"]
             }

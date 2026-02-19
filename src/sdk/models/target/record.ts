@@ -1,4 +1,4 @@
-import { FlattenedSchema } from "./models";
+import { DEFAULT_SYNCED_AT_COLUMN, FlattenedSchema } from "./models";
 
 export const removeParasiteProperties = (record: any, schema: FlattenedSchema) => {
     const schemaKeys = Object.keys(schema);
@@ -11,9 +11,9 @@ export const removeParasiteProperties = (record: any, schema: FlattenedSchema) =
     return record;
 }
 
-export const addWhalyFields = (record: any, batchDate: string) => {
+export const addWhalyFields = (record: any, batchDate: string, columnName: string = DEFAULT_SYNCED_AT_COLUMN) => {
     return {
         ...record,
-        _whaly_synced: batchDate
+        [columnName]: batchDate
     }
 }

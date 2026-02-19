@@ -83,7 +83,6 @@ export interface CsvFileConfig {
     encoding?: string;
     separator: string;
     fields: CsvFieldsConfig;
-    addSyncedAtColumn?: boolean;
 }
 
 // ─── FileStream Config (discriminated union) ────────────────────────────

@@ -12,10 +12,7 @@ export class CdnAssetTarget extends AssetTarget<CdnAssetTargetConfig> {
 
     constructor(config: CdnAssetTargetConfig) {
         super(config);
-        this.cdnService = new CdnService({
-            apiEndpoint: config.apiEndpoint,
-            serviceAccountKey: config.serviceAccountKey,
-        });
+        this.cdnService = new CdnService(config);
     }
 
     async shouldSync(entry: AssetEntry): Promise<boolean> {

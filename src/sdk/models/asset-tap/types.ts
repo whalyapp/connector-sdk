@@ -30,8 +30,10 @@ export interface ProcessedAsset {
 export interface AssetManifestEntry {
     sourcePath: string;
     destinationPath: string;
-    /** Local path of the file that was uploaded (uploadPath), for inspection */
-    localPath: string;
+    /** Path in the downloaded/ folder */
+    downloadedPath: string;
+    /** Path in the transformed/ folder (empty string if not transformed) */
+    transformedPath: string;
     size: number;
     contentType: string;
     status: "uploaded" | "skipped" | "error";
@@ -39,11 +41,19 @@ export interface AssetManifestEntry {
     error?: string;
 }
 
+export interface StreamManifest {
+    streamId: string;
+    mode: AssetReplicationMode;
+    syncedAt: string;
+    assets: AssetManifestEntry[];
+    summary: { total: number; uploaded: number; skipped: number; errors: number };
+}
+
 export interface AssetManifest {
     /** ISO 8601 timestamp of when the sync completed */
     syncedAt: string;
     mode: AssetReplicationMode;
-    assets: AssetManifestEntry[];
+    streams: StreamManifest[];
     summary: {
         total: number;
         uploaded: number;

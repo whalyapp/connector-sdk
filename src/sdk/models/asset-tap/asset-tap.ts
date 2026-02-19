@@ -3,7 +3,8 @@ import path from "node:path";
 import { logger } from "../../service/logger";
 import type { AssetTarget } from "../asset-target/asset-target";
 import type { AssetStream } from "./asset-stream";
-import type { AssetEntry, AssetManifest, AssetManifestEntry, AssetReplicationMode, ProcessedAsset } from "./types";
+import type { AssetEntry, AssetManifest, AssetManifestEntry, AssetReplicationMode, ProcessedAsset, StreamManifest } from "./types";
+import { isDryRun } from "../../service/dryRun";
 
 const logPrefix = "[AssetTap]";
 
@@ -54,17 +55,25 @@ export abstract class AssetTap<C> {
         const tmpDir = path.join(this.outputDir, "tmp");
         await fs.ensureDir(tmpDir);
 
-        const assetEntries: AssetManifestEntry[] = [];
+        const dryRun = isDryRun();
+        if (dryRun) {
+            logger.info(`${logPrefix} [DRY_RUN] mode active — skipping CDN checks and uploads`);
+        }
+
+        const streamManifests: StreamManifest[] = [];
         let entryIndex = 0;
+        let totalSummary = { total: 0, uploaded: 0, skipped: 0, errors: 0 };
 
         for (const stream of this.streams) {
             logger.info(`${logPrefix} Processing stream: ${stream.streamId} (mode=${stream.replicationMode})`);
 
+            const assetEntries: AssetManifestEntry[] = [];
+
             for await (const entry of stream.listAssets()) {
                 logger.debug(`${logPrefix} Processing entry: ${entry.sourcePath}`);
 
-                // INCREMENTAL: check if we need to sync this file
-                if (stream.replicationMode === "INCREMENTAL") {
+                // INCREMENTAL: check if we need to sync this file (skip CDN check in DRY_RUN)
+                if (stream.replicationMode === "INCREMENTAL" && !dryRun) {
                     const shouldSync = await this.target.shouldSync(entry);
 
                     if (!shouldSync) {
@@ -72,7 +81,8 @@ export abstract class AssetTap<C> {
                         assetEntries.push({
                             sourcePath: entry.sourcePath,
                             destinationPath: entry.destinationPath,
-                            localPath: "",
+                            downloadedPath: "",
+                            transformedPath: "",
                             size: 0,
                             contentType: entry.contentType,
                             status: "skipped",
@@ -107,26 +117,30 @@ export abstract class AssetTap<C> {
                             : entry.contentType,
                     };
 
-                    await this.target.uploadAsset(processed);
+                    if (!dryRun) {
+                        await this.target.uploadAsset(processed);
+                    }
 
                     assetEntries.push({
                         sourcePath: entry.sourcePath,
                         destinationPath: entry.destinationPath,
-                        localPath: uploadPath,
+                        downloadedPath,
+                        transformedPath: wasTransformed ? uploadPath : "",
                         size: processed.size,
                         contentType: processed.contentType,
                         status: "uploaded",
                         transformed: wasTransformed,
                     });
 
-                    logger.info(`${logPrefix} Uploaded ${entry.sourcePath} → ${entry.destinationPath}`);
+                    logger.info(`${logPrefix} ${dryRun ? "[DRY_RUN] Processed" : "Uploaded"} ${entry.sourcePath} → ${entry.destinationPath}`);
                 } catch (err) {
                     const message = err instanceof Error ? err.message : String(err);
                     logger.error(`${logPrefix} Failed to process ${entry.sourcePath}: ${message}`);
                     assetEntries.push({
                         sourcePath: entry.sourcePath,
                         destinationPath: entry.destinationPath,
-                        localPath: "",
+                        downloadedPath: "",
+                        transformedPath: "",
                         size: 0,
                         contentType: entry.contentType,
                         status: "error",
@@ -142,28 +156,44 @@ export abstract class AssetTap<C> {
                     }
                 }
             }
-        }
 
-        const summary = {
-            total: assetEntries.length,
-            uploaded: assetEntries.filter(a => a.status === "uploaded").length,
-            skipped: assetEntries.filter(a => a.status === "skipped").length,
-            errors: assetEntries.filter(a => a.status === "error").length,
-        };
+            const streamSummary = {
+                total: assetEntries.length,
+                uploaded: assetEntries.filter(a => a.status === "uploaded").length,
+                skipped: assetEntries.filter(a => a.status === "skipped").length,
+                errors: assetEntries.filter(a => a.status === "error").length,
+            };
+
+            totalSummary.total += streamSummary.total;
+            totalSummary.uploaded += streamSummary.uploaded;
+            totalSummary.skipped += streamSummary.skipped;
+            totalSummary.errors += streamSummary.errors;
+
+            streamManifests.push({
+                streamId: stream.streamId,
+                mode: stream.replicationMode,
+                syncedAt: new Date().toISOString(),
+                assets: assetEntries,
+                summary: streamSummary,
+            });
+        }
 
         const manifest: AssetManifest = {
             syncedAt: new Date().toISOString(),
             mode: deriveManifestMode(this.streams),
-            assets: assetEntries,
-            summary,
+            streams: streamManifests,
+            summary: totalSummary,
         };
 
         await fs.ensureDir(this.outputDir);
         await fs.writeJson(path.join(this.outputDir, "manifest.json"), manifest, { spaces: 2 });
 
-        await this.target.complete();
+        if (!dryRun) {
+            await this.target.complete();
+        }
 
-        logger.info(`${logPrefix} Sync complete. Uploaded=${summary.uploaded} Skipped=${summary.skipped} Errors=${summary.errors}`);
+        logger.info(`${logPrefix} Sync complete. Uploaded=${totalSummary.uploaded} Skipped=${totalSummary.skipped} Errors=${totalSummary.errors}`);
         return manifest;
     }
+
 }

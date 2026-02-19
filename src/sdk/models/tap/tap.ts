@@ -5,6 +5,7 @@ import { StateProvider } from "../state-provider/types";
 import { ITarget } from "../target/target";
 import { Stream } from "./stream";
 import Bluebird from "bluebird";
+import { isDryRun } from "../../service/dryRun";
 
 export const DEFAULT_MAX_CONCURRENT_STREAMS = 5;
 
@@ -41,6 +42,11 @@ export abstract class Tap<C> {
         }
 
         await this.init();
+
+        if (isDryRun()) {
+            logger.info(`[DRY_RUN] mode active — no external writes will occur`);
+        }
+
         logger.info(`🚀 Start syncing`)
 
         const state = StateService.getInstance().get();

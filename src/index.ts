@@ -5,6 +5,7 @@ export * from "./sdk/service/metric";
 export * from "./sdk/service/memory";
 export * from "./sdk/service/error";
 export * from "./sdk/service/exit";
+export * from "./sdk/service/dryRun";
 
 export * from "./sdk/models/replication";
 export * from "./sdk/models/error";

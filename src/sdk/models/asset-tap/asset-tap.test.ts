@@ -115,7 +115,7 @@ describe("AssetTap", () => {
 
         expect(target.uploaded).toHaveLength(0);
         expect(manifest.summary.skipped).toBe(1);
-        expect(manifest.assets[0]?.status).toBe("skipped");
+        expect(manifest.streams[0]?.assets[0]?.status).toBe("skipped");
     });
 
     it("FULL: uploads all entries regardless of shouldSync", async () => {
@@ -146,7 +146,7 @@ describe("AssetTap", () => {
         const manifestPath = path.join(tmpDir, "manifest.json");
         expect(await fs.pathExists(manifestPath)).toBe(true);
         const manifest: AssetManifest = await fs.readJson(manifestPath);
-        expect(manifest.assets).toHaveLength(1);
+        expect(manifest.streams[0]?.assets).toHaveLength(1);
         expect(manifest.summary.total).toBe(1);
     });
 
@@ -170,8 +170,9 @@ describe("AssetTap", () => {
 
         expect(manifest.summary.errors).toBe(1);
         expect(manifest.summary.uploaded).toBe(1);
-        expect(manifest.assets.find(a => a.sourcePath === "/a.jpg")?.status).toBe("error");
-        expect(manifest.assets.find(a => a.sourcePath === "/b.jpg")?.status).toBe("uploaded");
+        const assets = manifest.streams[0]?.assets ?? [];
+        expect(assets.find(a => a.sourcePath === "/a.jpg")?.status).toBe("error");
+        expect(assets.find(a => a.sourcePath === "/b.jpg")?.status).toBe("uploaded");
     });
 
     it("cleans up tmp files after upload", async () => {
@@ -262,8 +263,9 @@ describe("AssetTap", () => {
         // FULL stream uploads regardless, INCREMENTAL stream skips
         expect(manifest.summary.uploaded).toBe(1);
         expect(manifest.summary.skipped).toBe(1);
-        expect(manifest.assets.find(a => a.sourcePath === "/full.jpg")?.status).toBe("uploaded");
-        expect(manifest.assets.find(a => a.sourcePath === "/incr.jpg")?.status).toBe("skipped");
+        const allAssets = manifest.streams.flatMap(s => s.assets);
+        expect(allAssets.find(a => a.sourcePath === "/full.jpg")?.status).toBe("uploaded");
+        expect(allAssets.find(a => a.sourcePath === "/incr.jpg")?.status).toBe("skipped");
         // Mixed modes → manifest reports FULL
         expect(manifest.mode).toBe("FULL");
     });

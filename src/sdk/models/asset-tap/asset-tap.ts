@@ -4,7 +4,7 @@ import { logger } from "../../service/logger";
 import type { AssetTarget } from "../asset-target/asset-target";
 import type { AssetStream } from "./asset-stream";
 import type { AssetEntry, AssetManifest, AssetManifestEntry, AssetReplicationMode, ProcessedAsset, StreamManifest } from "./types";
-import { isDryRun } from "../../service/dryRun";
+import { isDryRun, getDryRunLimit } from "../../service/dryRun";
 
 const logPrefix = "[AssetTap]";
 
@@ -56,8 +56,12 @@ export abstract class AssetTap<C> {
         await fs.ensureDir(tmpDir);
 
         const dryRun = isDryRun();
+        const dryRunLimit = dryRun ? getDryRunLimit() : undefined;
         if (dryRun) {
             logger.info(`${logPrefix} [DRY_RUN] mode active — skipping CDN checks and uploads`);
+            if (dryRunLimit !== undefined) {
+                logger.info(`${logPrefix} [DRY_RUN] Limit: ${dryRunLimit} assets per stream`);
+            }
         }
 
         const streamManifests: StreamManifest[] = [];
@@ -68,6 +72,7 @@ export abstract class AssetTap<C> {
             logger.info(`${logPrefix} Processing stream: ${stream.streamId} (mode=${stream.replicationMode})`);
 
             const assetEntries: AssetManifestEntry[] = [];
+            let streamAssetCount = 0;
 
             for await (const entry of stream.listAssets()) {
                 logger.debug(`${logPrefix} Processing entry: ${entry.sourcePath}`);
@@ -98,6 +103,7 @@ export abstract class AssetTap<C> {
                 const downloadedPath = path.join(tmpDir, fileName);
                 let uploadPath = downloadedPath;
                 entryIndex++;
+                streamAssetCount++;
 
                 try {
                     await stream.downloadEntry(entry, downloadedPath);
@@ -119,6 +125,11 @@ export abstract class AssetTap<C> {
 
                     if (!dryRun) {
                         await this.target.uploadAsset(processed);
+                    } else {
+                        // Copy the transformed file to out/<streamId>/<destinationPath> for inspection
+                        const inspectPath = path.join(this.outputDir, stream.streamId, entry.destinationPath);
+                        await fs.ensureDir(path.dirname(inspectPath));
+                        await fs.copy(uploadPath, inspectPath);
                     }
 
                     assetEntries.push({
@@ -154,6 +165,11 @@ export abstract class AssetTap<C> {
                     if (uploadPath !== downloadedPath) {
                         await fs.remove(uploadPath).catch(() => undefined);
                     }
+                }
+
+                if (dryRunLimit !== undefined && streamAssetCount >= dryRunLimit) {
+                    logger.info(`${logPrefix} [DRY_RUN] Reached limit of ${dryRunLimit} for stream "${stream.streamId}", stopping.`);
+                    break;
                 }
             }
 

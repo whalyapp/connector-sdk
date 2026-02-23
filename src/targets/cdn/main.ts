@@ -4,6 +4,7 @@ import { logger } from "../../sdk/service/logger";
 import { AssetTarget } from "../../sdk/models/asset-target/asset-target";
 import type { AssetEntry, ProcessedAsset } from "../../sdk/models/asset-tap/types";
 import type { CdnAssetTargetConfig } from "./models/config";
+import { getCdnId } from "../../sdk/service/cdnId";
 
 const logPrefix = "[CdnAssetTarget]";
 
@@ -16,7 +17,7 @@ export class CdnAssetTarget extends AssetTarget<CdnAssetTargetConfig> {
     }
 
     async shouldSync(entry: AssetEntry): Promise<boolean> {
-        const metadata = await this.cdnService.getFileMetadata(this.config.cdnId, entry.destinationPath);
+        const metadata = await this.cdnService.getFileMetadata(getCdnId(this.config.cdnId), entry.destinationPath);
 
         if (!metadata.exists) {
             logger.debug(`${logPrefix} ${entry.destinationPath} not in CDN → will sync`);
@@ -43,7 +44,7 @@ export class CdnAssetTarget extends AssetTarget<CdnAssetTargetConfig> {
     async uploadAsset(asset: ProcessedAsset): Promise<void> {
         const fileBuffer = await fs.readFile(asset.uploadPath);
         await this.cdnService.uploadFile(
-            this.config.cdnId,
+            getCdnId(this.config.cdnId),
             asset.entry.destinationPath,
             fileBuffer
         );

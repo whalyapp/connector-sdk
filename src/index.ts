@@ -8,6 +8,7 @@ export * from "./sdk/service/exit";
 export * from "./sdk/service/dryRun";
 export * from "./sdk/service/apiEndpoint";
 export * from "./sdk/service/serviceAccountKey";
+export * from "./sdk/service/cdnId";
 
 export * from "./sdk/models/replication";
 export * from "./sdk/models/error";

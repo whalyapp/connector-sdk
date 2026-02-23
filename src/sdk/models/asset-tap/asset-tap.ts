@@ -52,6 +52,8 @@ export abstract class AssetTap<C> {
             if (dryRunLimit !== undefined) {
                 logger.info(`${logPrefix} [DRY_RUN] Limit: ${dryRunLimit} assets per stream`);
             }
+        } else if (process.env["DRY_RUN_LIMIT"] !== undefined) {
+            logger.warn(`${logPrefix} DRY_RUN_LIMIT is set but DRY_RUN is not active — limit will be ignored`);
         }
 
         const streamManifests: StreamManifest[] = [];

@@ -64,8 +64,8 @@ class StubTarget extends AssetTarget<{}> {
 class StubTap extends AssetTap<{}> {
     private stubStreams: AssetStream<unknown>[];
 
-    constructor(target: AssetTarget<unknown>, streams: AssetStream<unknown>[], outDir: string) {
-        super(target, {}, outDir);
+    constructor(target: AssetTarget<unknown>, streams: AssetStream<unknown>[], outDir: string, concurrency?: number) {
+        super(target, {}, outDir, concurrency);
         this.stubStreams = streams;
     }
 
@@ -270,6 +270,86 @@ describe("AssetTap", () => {
         expect(manifest.mode).toBe("FULL");
     });
 
+    it("processes assets concurrently up to the concurrency limit", async () => {
+        const entries: AssetEntry[] = Array.from({ length: 6 }, (_, i) => ({
+            sourcePath: `/${i}.jpg`,
+            destinationPath: `${i}.jpg`,
+            lastModified: new Date(),
+            contentType: "image/jpeg",
+        }));
+
+        let active = 0;
+        let maxActive = 0;
+        const target = new StubTarget(true);
+        const stream = new StubStream("images", entries);
+        const originalDownload = stream.downloadEntry.bind(stream);
+        stream.downloadEntry = async (entry: AssetEntry, destPath: string) => {
+            active++;
+            maxActive = Math.max(maxActive, active);
+            await new Promise(r => setTimeout(r, 50));
+            await originalDownload(entry, destPath);
+            active--;
+        };
+
+        const tap = new StubTap(target, [stream], tmpDir, 3);
+        const manifest = await tap.sync();
+
+        expect(manifest.summary.uploaded).toBe(6);
+        expect(maxActive).toBeGreaterThan(1);
+        expect(maxActive).toBeLessThanOrEqual(3);
+    });
+
+    it("concurrency=1 processes assets sequentially", async () => {
+        const entries: AssetEntry[] = Array.from({ length: 3 }, (_, i) => ({
+            sourcePath: `/${i}.jpg`,
+            destinationPath: `${i}.jpg`,
+            lastModified: new Date(),
+            contentType: "image/jpeg",
+        }));
+
+        let active = 0;
+        let maxActive = 0;
+        const target = new StubTarget(true);
+        const stream = new StubStream("images", entries);
+        const originalDownload = stream.downloadEntry.bind(stream);
+        stream.downloadEntry = async (entry: AssetEntry, destPath: string) => {
+            active++;
+            maxActive = Math.max(maxActive, active);
+            await new Promise(r => setTimeout(r, 20));
+            await originalDownload(entry, destPath);
+            active--;
+        };
+
+        const tap = new StubTap(target, [stream], tmpDir, 1);
+        const manifest = await tap.sync();
+
+        expect(manifest.summary.uploaded).toBe(3);
+        expect(maxActive).toBe(1);
+    });
+
+    it("concurrent processing still isolates per-asset errors", async () => {
+        const entries: AssetEntry[] = Array.from({ length: 4 }, (_, i) => ({
+            sourcePath: `/${i}.jpg`,
+            destinationPath: `${i}.jpg`,
+            lastModified: new Date(),
+            contentType: "image/jpeg",
+        }));
+
+        const target = new StubTarget(true);
+        let uploadCount = 0;
+        target.uploadAsset = async (_asset) => {
+            uploadCount++;
+            if (uploadCount === 2) throw new Error("upload failed");
+        };
+
+        const stream = new StubStream("images", entries);
+        const tap = new StubTap(target, [stream], tmpDir, 2);
+        const manifest = await tap.sync();
+
+        expect(manifest.summary.errors).toBe(1);
+        expect(manifest.summary.uploaded).toBe(3);
+    });
+
     describe("DRY_RUN mode", () => {
         beforeEach(() => { process.env["DRY_RUN"] = "true"; });
         afterEach(() => {
@@ -319,6 +399,29 @@ describe("AssetTap", () => {
 
             const tmpFiles = await fs.readdir(path.join(tmpDir, "tmp")).catch(() => []);
             expect(tmpFiles).toHaveLength(0);
+        });
+
+        it("cleans out/ directory from previous runs before starting", async () => {
+            // Pre-populate with stale files from a "previous run"
+            const staleDir = path.join(tmpDir, "old-stream");
+            await fs.ensureDir(staleDir);
+            await fs.writeFile(path.join(staleDir, "stale.jpg"), "old-content");
+            await fs.writeFile(path.join(tmpDir, "manifest.json"), "{}");
+
+            const entries: AssetEntry[] = [
+                { sourcePath: "/a.jpg", destinationPath: "a.jpg", lastModified: new Date(), contentType: "image/jpeg" },
+            ];
+            const target = new StubTarget(true);
+            const stream = new StubStream("images", entries);
+            const tap = new StubTap(target, [stream], tmpDir);
+
+            await tap.sync();
+
+            // Stale directory should be gone
+            expect(await fs.pathExists(staleDir)).toBe(false);
+            // New outputs should exist
+            expect(await fs.pathExists(path.join(tmpDir, "manifest.json"))).toBe(true);
+            expect(await fs.pathExists(path.join(tmpDir, "images", "a.jpg"))).toBe(true);
         });
 
         it("DRY_RUN_LIMIT stops after N assets per stream", async () => {

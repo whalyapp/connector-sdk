@@ -269,4 +269,92 @@ describe("AssetTap", () => {
         // Mixed modes → manifest reports FULL
         expect(manifest.mode).toBe("FULL");
     });
+
+    describe("DRY_RUN mode", () => {
+        beforeEach(() => { process.env["DRY_RUN"] = "true"; });
+        afterEach(() => {
+            delete process.env["DRY_RUN"];
+            delete process.env["DRY_RUN_LIMIT"];
+        });
+
+        it("does not call uploadAsset or target.complete", async () => {
+            const entries: AssetEntry[] = [
+                { sourcePath: "/a.jpg", destinationPath: "a.jpg", lastModified: new Date(), contentType: "image/jpeg" },
+            ];
+            const target = new StubTarget(true);
+            const completeSpy = vi.spyOn(target, "complete" as any);
+            const stream = new StubStream("images", entries);
+            const tap = new StubTap(target, [stream], tmpDir);
+
+            await tap.sync();
+
+            expect(target.uploaded).toHaveLength(0);
+            expect(completeSpy).not.toHaveBeenCalled();
+        });
+
+        it("copies transformed file to out/<streamId>/<destinationPath>", async () => {
+            const entries: AssetEntry[] = [
+                { sourcePath: "/logo.jpg", destinationPath: "logo.webp", lastModified: new Date(), contentType: "image/jpeg" },
+            ];
+            const target = new StubTarget(true);
+            const stream = new TransformingStream("my-stream", entries);
+            const tap = new StubTap(target, [stream], tmpDir);
+
+            await tap.sync();
+
+            const inspectPath = path.join(tmpDir, "my-stream", "logo.webp");
+            expect(await fs.pathExists(inspectPath)).toBe(true);
+            expect(await fs.readFile(inspectPath, "utf-8")).toBe("fake-webp-content");
+        });
+
+        it("still cleans up tmp files after dry-run processing", async () => {
+            const entries: AssetEntry[] = [
+                { sourcePath: "/logo.jpg", destinationPath: "logo.webp", lastModified: new Date(), contentType: "image/jpeg" },
+            ];
+            const target = new StubTarget(true);
+            const stream = new TransformingStream("my-stream", entries);
+            const tap = new StubTap(target, [stream], tmpDir);
+
+            await tap.sync();
+
+            const tmpFiles = await fs.readdir(path.join(tmpDir, "tmp")).catch(() => []);
+            expect(tmpFiles).toHaveLength(0);
+        });
+
+        it("DRY_RUN_LIMIT stops after N assets per stream", async () => {
+            const entries: AssetEntry[] = [
+                { sourcePath: "/a.jpg", destinationPath: "a.jpg", lastModified: new Date(), contentType: "image/jpeg" },
+                { sourcePath: "/b.jpg", destinationPath: "b.jpg", lastModified: new Date(), contentType: "image/jpeg" },
+                { sourcePath: "/c.jpg", destinationPath: "c.jpg", lastModified: new Date(), contentType: "image/jpeg" },
+            ];
+            process.env["DRY_RUN_LIMIT"] = "2";
+            const target = new StubTarget(true);
+            const stream = new StubStream("images", entries);
+            const tap = new StubTap(target, [stream], tmpDir);
+
+            const manifest = await tap.sync();
+
+            expect(manifest.summary.total).toBe(2);
+        });
+
+        it("DRY_RUN_LIMIT applies independently per stream", async () => {
+            const makeEntries = (prefix: string): AssetEntry[] => [
+                { sourcePath: `/${prefix}-a.jpg`, destinationPath: `${prefix}-a.jpg`, lastModified: new Date(), contentType: "image/jpeg" },
+                { sourcePath: `/${prefix}-b.jpg`, destinationPath: `${prefix}-b.jpg`, lastModified: new Date(), contentType: "image/jpeg" },
+                { sourcePath: `/${prefix}-c.jpg`, destinationPath: `${prefix}-c.jpg`, lastModified: new Date(), contentType: "image/jpeg" },
+            ];
+            process.env["DRY_RUN_LIMIT"] = "2";
+            const target = new StubTarget(true);
+            const stream1 = new StubStream("stream-1", makeEntries("s1"));
+            const stream2 = new StubStream("stream-2", makeEntries("s2"));
+            const tap = new StubTap(target, [stream1, stream2], tmpDir);
+
+            const manifest = await tap.sync();
+
+            // 2 per stream = 4 total
+            expect(manifest.summary.total).toBe(4);
+            expect(manifest.streams[0]?.assets).toHaveLength(2);
+            expect(manifest.streams[1]?.assets).toHaveLength(2);
+        });
+    });
 });

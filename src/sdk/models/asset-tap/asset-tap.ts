@@ -1,6 +1,7 @@
 import fs from "fs-extra";
 import path from "node:path";
 import { logger } from "../../service/logger";
+import { getMimeType } from "../../service/mime";
 import type { AssetTarget } from "../asset-target/asset-target";
 import type { AssetStream } from "./asset-stream";
 import type { AssetEntry, AssetManifest, AssetManifestEntry, AssetReplicationMode, ProcessedAsset, StreamManifest } from "./types";
@@ -8,20 +9,9 @@ import { isDryRun, getDryRunLimit } from "../../service/dryRun";
 
 const logPrefix = "[AssetTap]";
 
-const MIME_BY_EXT: Record<string, string> = {
-    ".webp": "image/webp",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".gif": "image/gif",
-    ".svg": "image/svg+xml",
-    ".avif": "image/avif",
-    ".pdf": "application/pdf",
-};
-
 function inferContentType(filePath: string, fallback: string): string {
-    const ext = path.extname(filePath).toLowerCase();
-    return MIME_BY_EXT[ext] ?? fallback;
+    const mime = getMimeType(filePath);
+    return mime !== "application/octet-stream" ? mime : fallback;
 }
 
 function deriveManifestMode(streams: AssetStream<unknown>[]): AssetReplicationMode {
@@ -103,7 +93,7 @@ export abstract class AssetTap<C> {
                 const downloadedPath = path.join(tmpDir, fileName);
                 let uploadPath = downloadedPath;
                 entryIndex++;
-                streamAssetCount++;
+                streamAssetCount++; // counts attempted assets only (INCREMENTAL skipped entries already `continue`d above)
 
                 try {
                     await stream.downloadEntry(entry, downloadedPath);

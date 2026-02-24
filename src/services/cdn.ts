@@ -1,9 +1,11 @@
-import axios, { AxiosInstance } from "axios";
+import axios, { AxiosError, AxiosInstance } from "axios";
+import axiosRetry from "axios-retry";
 import { logger } from "../sdk/service/logger";
 import { getApiEndpoint } from "../sdk/service/apiEndpoint";
 import { getServiceAccountKey } from "../sdk/service/serviceAccountKey";
 
 const logPrefix = "[CdnService]";
+const MAX_RETRIES = 10;
 
 export interface CdnServiceConfig {
     /** e.g. "https://org.my.whaly.io" */
@@ -32,9 +34,32 @@ export class CdnService {
         const resolvedEndpoint = getApiEndpoint(config.apiEndpoint);
         this.axiosClient = axios.create({
             baseURL: resolvedEndpoint,
+            timeout: 120_000,
             headers: {
                 Authorization: `Bearer ${resolvedKey}`,
                 Accept: "application/json",
+            },
+        });
+
+        axiosRetry(this.axiosClient, {
+            retries: MAX_RETRIES,
+            retryCondition: (error: AxiosError): boolean => {
+                const status = error.response?.status ?? 0;
+                return !error.response || status === 429 || (status >= 500 && status < 600);
+            },
+            retryDelay: (retryCount: number, error: AxiosError): number => {
+                const retryAfter = error.response?.headers?.["retry-after"];
+                if (retryAfter) {
+                    const seconds = Number(retryAfter);
+                    if (!isNaN(seconds) && seconds > 0) {
+                        logger.info(`${logPrefix} Rate limited — waiting ${seconds}s (Retry-After header), attempt ${retryCount}/${MAX_RETRIES}`);
+                        return seconds * 1000;
+                    }
+                }
+                // Fallback to exponential backoff if no Retry-After header
+                const delay = axiosRetry.exponentialDelay(retryCount);
+                logger.info(`${logPrefix} Retrying in ${delay}ms (attempt ${retryCount}/${MAX_RETRIES}) for ${error.config?.method?.toUpperCase()} ${error.config?.url}`);
+                return delay;
             },
         });
     }

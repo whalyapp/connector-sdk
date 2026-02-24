@@ -9,6 +9,9 @@ export * from "./sdk/service/dryRun";
 export * from "./sdk/service/apiEndpoint";
 export * from "./sdk/service/serviceAccountKey";
 export * from "./sdk/service/cdnId";
+export * from "./sdk/service/env";
+export * from "./sdk/service/concurrency";
+export * from "./sdk/service/mime";
 
 export * from "./sdk/models/replication";
 export * from "./sdk/models/error";

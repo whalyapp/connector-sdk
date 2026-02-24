@@ -42,6 +42,11 @@
     "moduleDetection": "force",
     "skipLibCheck": true,
     "esModuleInterop": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "csv-writer": ["./src/types/csv-writer.d.ts"]
+    }
   }
 ,
   "exclude": [

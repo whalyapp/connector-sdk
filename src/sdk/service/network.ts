@@ -274,10 +274,52 @@ export const postUrlEncodedApiCall = async (endpoint: string, config: PostConfig
         return response.data;
     } catch (err: any) {
         if (err.response.status > 400) {
-            throw new Error(`We got a \`${err.response.status}\` status code from endpoint: \`${endpoint}\`. 
-            
+            throw new Error(`We got a \`${err.response.status}\` status code from endpoint: \`${endpoint}\`.
+
             Response body from the server: ${JSON.stringify(err.response.data)}`);
         }
         throw err;
     }
+}
+
+/**
+ * Collect all records from a paginated HTTP endpoint.
+ *
+ * Eliminates the need for manual `while (!done)` loops in connector code,
+ * and avoids the TypeScript TS7022 circular-inference error that occurs when
+ * a `string | null` loop variable is reassigned from the response body.
+ *
+ * @param options.initialUrl  - First page URL (always a `string`, never null)
+ * @param options.fetchPage   - Fetches one page; receives the current URL, returns parsed response
+ * @param options.getRecords  - Extracts the array of records from a page response
+ * @param options.getNextUrl  - Extracts the next-page URL, or `undefined` when done
+ *
+ * @example
+ * // Salesforce SOQL pagination
+ * const records = await collectPaginated({
+ *   initialUrl: `/services/data/v61.0/queryAll?q=${encodeURIComponent(soql)}`,
+ *   fetchPage:  (url) => http.get(url, { headers }).then(r => r.data),
+ *   getRecords: (res) => res.records,
+ *   getNextUrl: (res) => res.nextRecordsUrl,
+ * });
+ */
+export async function collectPaginated<TResponse, TRecord>(options: {
+    initialUrl: string;
+    fetchPage: (url: string) => Promise<TResponse>;
+    getRecords: (response: TResponse) => TRecord[];
+    getNextUrl: (response: TResponse) => string | undefined;
+}): Promise<TRecord[]> {
+    const { initialUrl, fetchPage, getRecords, getNextUrl } = options;
+    const results: TRecord[] = [];
+    let currentUrl: string = initialUrl;
+
+    while (true) {
+        const response = await fetchPage(currentUrl);
+        results.push(...getRecords(response));
+        const nextUrl = getNextUrl(response);
+        if (nextUrl === undefined) break;
+        currentUrl = nextUrl;
+    }
+
+    return results;
 }

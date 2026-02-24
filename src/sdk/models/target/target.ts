@@ -16,6 +16,10 @@ import { ReplicationMethod } from "../replication";
 import Bluebird from "bluebird";
 import { StateProvider } from "../state-provider/types";
 import { StreamId } from "../metadata";
+import { isDryRun } from "../../service/dryRun";
+import { safePath } from "./temporaryFile";
+import fs from "fs-extra";
+import path from "node:path";
 
 const semaphore = new Semaphore(1);
 
@@ -159,7 +163,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
             // To avoid getting any conflicts when loading data in the warehouse, we run a semaphore to have a concurrency of 1
             // Only check every 10,000 rows to avoid semaphore acquisition overhead on every single row
             // (intermediate batch threshold is 1,000,000 rows, so checking every 10,000 is more than sufficient)
-            if (stream.getBatchedRowCount() % 10_000 === 0) {
+            if (stream.getBatchedRowCount() % 10_000 === 0 && !isDryRun()) {
                 await semaphore.runExclusive(async () => {
                     const shouldUploadIntermediateBatch = this.shouldUploadIntermediateBatch(streamId)
                     if (shouldUploadIntermediateBatch) {
@@ -277,7 +281,9 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
                         const { hasBreakingChanges, changes } = this.analyzeSchemaChanges(prevSchema, newFlattenedSchema, streamId);
                         if (hasBreakingChanges) {
                             logger.info(`🔥 StreamId=${streamId} - Detected BREAKING schema changes: ${changes.join(', ')}. Loading batched records before applying new schema.`);
-                            await ITarget.uploadSingleStreamToWarehouse(prevStreamState);
+                            if (!isDryRun()) {
+                                await ITarget.uploadSingleStreamToWarehouse(prevStreamState);
+                            }
                         } else {
                             logger.info(`✅ StreamId=${streamId} - Detected NON-BREAKING schema changes: ${changes.join(', ')}. Continuing without uploading batched records.`);
                         }
@@ -318,35 +324,39 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
 
             streamState.setKeyProperties(message.keyProperties);
 
-            await dbSync.updateSchemaInWarehouse(schema, message.keyProperties);
+            if (!isDryRun()) {
+                await dbSync.updateSchemaInWarehouse(schema, message.keyProperties);
 
-            const {
-                database: databaseName,
-                schema: schemaName
-            } = this.config;
+                const {
+                    database: databaseName,
+                    schema: schemaName
+                } = this.config;
 
-            const tableName = this.genTableName(streamId);
+                const tableName = this.genTableName(streamId);
 
-            const formattedRelationshipMessage: SchemaMessage = {
-                ...message,
-                keyProperties: message.keyProperties.map(k => {
-                    const translation = streamState.getDbSync().renamedColumnStore.getColumnTranslation(message.stream, k);
-                    if (translation) {
-                        return translation;
-                    }
-                    return k
-                })
-            }
-
-            await Bluebird.map(this.schemaHooks, async (hook) => {
-                const input: TargetSchemaHookInput = {
-                    databaseName,
-                    schemaName,
-                    tableName,
-                    message: formattedRelationshipMessage,
+                const formattedRelationshipMessage: SchemaMessage = {
+                    ...message,
+                    keyProperties: message.keyProperties.map(k => {
+                        const translation = streamState.getDbSync().renamedColumnStore.getColumnTranslation(message.stream, k);
+                        if (translation) {
+                            return translation;
+                        }
+                        return k
+                    })
                 }
-                await hook.writeSchema(input);
-            }, { concurrency: 3 })
+
+                await Bluebird.map(this.schemaHooks, async (hook) => {
+                    const input: TargetSchemaHookInput = {
+                        databaseName,
+                        schemaName,
+                        tableName,
+                        message: formattedRelationshipMessage,
+                    }
+                    await hook.writeSchema(input);
+                }, { concurrency: 3 })
+            } else {
+                logger.info(`[DRY_RUN] Stream: ${streamId} - Skipping warehouse schema update and schema hooks`);
+            }
 
             return Promise.resolve();
         } catch (err) {
@@ -373,6 +383,38 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
     complete = async (): Promise<void> => {
 
         try {
+            if (isDryRun()) {
+                logger.info(`[DRY_RUN] Data Extraction is complete. Copying tmp files to out/ instead of loading to warehouse.`);
+                const outDir = path.resolve("out");
+                await fs.ensureDir(outDir);
+
+                for (const streamId of Object.keys(this.streams)) {
+                    const streamState = this.streams[streamId];
+                    if (!streamState || streamState.getBatchedRowCount() === 0) continue;
+
+                    const fileToLoad = streamState.getFileToLoad();
+
+                    // Flush and close the write stream before copying
+                    await new Promise<void>((resolve, reject) => {
+                        fileToLoad.stream.end(() => {
+                            fileToLoad.stream.close((err) => {
+                                if (err) reject(err);
+                                else resolve();
+                            });
+                        });
+                    });
+
+                    const destPath = path.join(outDir, `${safePath(streamId)}.ndjson`);
+                    await fs.copy(fileToLoad.path, destPath);
+                    logger.info(`[DRY_RUN] Stream: ${streamId} - Copied ${streamState.getBatchedRowCount()} records to ${destPath}`);
+
+                    // Clean up tmp file
+                    await fs.remove(fileToLoad.path);
+                }
+
+                return;
+            }
+
             logger.info(`👍 Data Extraction is complete. Will load remaining batched stream records.`)
 
             await this.loadAllStreamsInWarehouse({ isFinalLoad: true });

@@ -324,6 +324,9 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
 
             streamState.setKeyProperties(message.keyProperties);
 
+            // Always compute column name mappings (needed for record processing even in dry-run)
+            dbSync.renamedColumnStore.computeColumnNameForStream(streamId, schema);
+
             if (!isDryRun()) {
                 await dbSync.updateSchemaInWarehouse(schema, message.keyProperties);
 

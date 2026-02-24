@@ -317,7 +317,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
             streamState.setCompiledValidateFn(this.ajv.compile({ type: "object", properties: schema }));
 
             const streamReplicationMethod = this.streams[streamId]?.getReplicationMethod();
-            if (message.keyProperties.length === 0 && streamReplicationMethod !== ReplicationMethod.APPEND) {
+            if (message.keyProperties.length === 0 && streamReplicationMethod === ReplicationMethod.INCREMENTAL) {
                 throw new Error(`StreamId: ${message.stream} - \`key_properties\` field is required and can't be empty in SCHEMA message.
             Received SCHEMA message: ${JSON.stringify(message)}`)
             }

@@ -12,6 +12,7 @@ import cloneDeep from "lodash/cloneDeep.js";
 import { Schema } from "../schema";
 import Bluebird from "bluebird";
 import { DEFAULT_MAX_CONCURRENT_STREAMS } from "./tap";
+import { getDryRunLimit, isDryRun } from "../../service/dryRun";
 import { CounterMetric, EXECUTION_TIME_METRIC_NAME, getCounterMetrics, MetricConfiguration, ROWS_SYNCED_METRIC_NAME } from "../../service/metric";
 import { format } from "util";
 
@@ -360,6 +361,7 @@ export abstract class Stream<O = any, C = any, P = undefined> {
     // Private sync methods:
     async _syncRecords(parent?: P): Promise<void> {
         let rowsSent = 0;
+        const dryRunLimit = isDryRun() ? getDryRunLimit() : undefined;
 
         let recordSyncedMetrics: CounterMetric[] = [];
         if (this.rowsSyncedMetricsConf.isEnabled() === true) {
@@ -410,6 +412,11 @@ export abstract class Stream<O = any, C = any, P = undefined> {
                 metric.increment();
             })
             rowsSent += 1;
+
+            if (dryRunLimit !== undefined && rowsSent >= dryRunLimit) {
+                logger.info(`🛑 Stream: ${this.streamId} - DRY_RUN_LIMIT reached (${dryRunLimit} records), stopping.`);
+                break;
+            }
 
             if (rowsSent % 1000 === 0) {
                 const percentStr = this.totalRows

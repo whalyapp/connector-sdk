@@ -164,6 +164,23 @@ describe("getReplaceQueries", () => {
   });
 });
 
+describe("getReplaceQueries without primary keys", () => {
+  it("uses TRUNCATE + INSERT when no primary keys", () => {
+    const sync = createSync([]);
+    const queries = sync.getReplaceQueries();
+    expect(queries[0]).toContain("TRUNCATE TABLE");
+    expect(queries[1]).toContain("INSERT INTO");
+    expect(queries[1]).not.toContain("MERGE");
+  });
+
+  it("still uses TRUNCATE + MERGE when primary keys are present", () => {
+    const sync = createSync(["pk"]);
+    const queries = sync.getReplaceQueries();
+    expect(queries[0]).toContain("TRUNCATE TABLE");
+    expect(queries[1]).toContain("MERGE");
+  });
+});
+
 describe("getAppendQueries", () => {
   it("generates INSERT INTO...SELECT", () => {
     const sync = createSync();

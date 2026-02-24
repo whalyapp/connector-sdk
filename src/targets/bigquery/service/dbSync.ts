@@ -202,6 +202,12 @@ export class BigQueryDBSync extends StreamWarehouseSyncService {
     }
 
     getReplaceQueries = (): string[] => {
+        if (this.primaryKeys.length === 0) {
+            return [
+                `TRUNCATE TABLE ${this.sqlTableId};`,
+                ...this.getAppendQueries()
+            ];
+        }
         return [
             `TRUNCATE TABLE ${this.sqlTableId};`,
             ...this.getMergeQueries()

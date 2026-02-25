@@ -69,6 +69,15 @@ export * from "./sdk/models/asset-tap/asset-tap";
 export * from "./sdk/models/asset-tap/image-transform";
 export * from "./sdk/models/asset-target/asset-target";
 
+/**
+ * Document Tap / Target (document-level pipeline with reconciliation)
+ */
+export * from "./sdk/models/document-tap/types";
+export * from "./sdk/models/document-tap/document-stream";
+export * from "./sdk/models/document-tap/document-tap";
+export * from "./sdk/models/document-target/whaly-document-target";
+export * from "./services/whaly-document";
+
 /** The SDK is including some major targets and state providers implemantations */
 export * from "./targets/bigquery/main";
 export * from "./targets/bigquery/models/config";

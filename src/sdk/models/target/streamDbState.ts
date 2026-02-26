@@ -34,16 +34,20 @@ export class StreamState {
     // Pre-compiled ajv ValidateFunction — compiled once per schema, reused for every row
     compiledValidateFn?: ValidateFunction;
 
+    tmpDir: string;
+
     constructor(
-        streamId: StreamId, 
-        dbSync: StreamWarehouseSyncService, 
-        replicationMethod: ReplicationMethod, 
+        streamId: StreamId,
+        dbSync: StreamWarehouseSyncService,
+        replicationMethod: ReplicationMethod,
+        tmpDir: string = "./tmp",
         ) {
         this.streamId = streamId;
         this.dbSync = dbSync;
+        this.tmpDir = tmpDir;
 
         this.batchedRowCount = 0;
-        this.fileToLoad = createTemporaryFileStream(streamId);
+        this.fileToLoad = createTemporaryFileStream(streamId, this.tmpDir);
         this.syncedRowCount = 0;
         this.keyProperties = [];
         this.batchDate = dayjs();
@@ -84,11 +88,12 @@ export class StreamState {
     }
 
     resetFileToLoad() {
+        this.syncedRowCount += this.batchedRowCount;
         this.fileToLoad.stream.close();
         const oldPath = this.fileToLoad.path;
         // Delete the old file to make some space
         fs.unlinkSync(oldPath);
-        this.fileToLoad = createTemporaryFileStream(this.streamId);
+        this.fileToLoad = createTemporaryFileStream(this.streamId, this.tmpDir);
         this.batchedRowCount = 0;
     }
 

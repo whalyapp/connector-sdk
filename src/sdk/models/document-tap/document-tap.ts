@@ -28,8 +28,14 @@ interface DiffResult {
 export abstract class DocumentTap<C> {
     readonly config: C;
     readonly outputDir: string;
-    readonly streams: DocumentStream<unknown>[] = [];
     readonly concurrency: number;
+
+    /**
+     * The single stream for this tap.
+     * Set during init(). A DocumentTap supports exactly one stream to avoid
+     * cross-stream deletion issues (existing docs cannot be filtered by stream).
+     */
+    stream!: DocumentStream<unknown>;
 
     target!: WhalyDocumentTarget;
 
@@ -39,7 +45,10 @@ export abstract class DocumentTap<C> {
         this.concurrency = concurrency;
     }
 
-    /** Register streams. Called once at the start of sync(). */
+    /**
+     * Initialize the tap: set `this.stream` to the single DocumentStream.
+     * Called once at the start of sync().
+     */
     abstract init(): Promise<void>;
 
     async sync(): Promise<DocumentManifest> {
@@ -49,6 +58,10 @@ export abstract class DocumentTap<C> {
 
         await this.init();
 
+        if (!this.stream) {
+            throw new Error(`${logPrefix} No stream set. Assign this.stream in init().`);
+        }
+
         const dryRun = isDryRun();
         const dryRunLimit = dryRun ? getDryRunLimit() : undefined;
         if (dryRun) {
@@ -57,22 +70,23 @@ export abstract class DocumentTap<C> {
             if (dryRunLimit !== undefined) {
                 logger.info(`${logPrefix} [DRY_RUN] Limit: ${dryRunLimit} documents per stream`);
             }
+        } else if (process.env["DRY_RUN_LIMIT"] !== undefined) {
+            logger.warn(`${logPrefix} DRY_RUN_LIMIT is set but DRY_RUN is not active — limit will be ignored`);
         }
 
         const tmpDir = path.join(this.outputDir, "tmp");
         await fs.ensureDir(tmpDir);
 
-        const streamManifests: DocumentStreamManifest[] = [];
-        let totalSummary = emptyDocumentSummary();
+        try {
+            const stream = this.stream;
 
-        for (const stream of this.streams) {
             logger.info(`${logPrefix} Processing stream: ${stream.streamId}`);
 
             // 1. LIST PHASE
             const sourceEntries = await this.collectSourceEntries(stream, dryRunLimit);
-            const existingDocs = dryRun ? [] : await this.target.listExistingDocuments();
 
             // 2. DIFF PHASE
+            const existingDocs = dryRun ? [] : await this.target.listExistingDocuments();
             const diff = this.computeDiff(stream, sourceEntries, existingDocs);
 
             logger.info(`${logPrefix} Stream ${stream.streamId} diff: ` +
@@ -109,33 +123,31 @@ export abstract class DocumentTap<C> {
 
             // 4. MANIFEST PHASE
             const streamSummary = this.computeSummary(entries);
-            totalSummary = addDocumentSummaries(totalSummary, streamSummary);
 
-            streamManifests.push({
+            const streamManifest: DocumentStreamManifest = {
                 streamId: stream.streamId,
                 syncedAt: new Date().toISOString(),
                 documents: entries,
                 summary: streamSummary,
-            });
+            };
+
+            const manifest: DocumentManifest = {
+                syncedAt: new Date().toISOString(),
+                streams: [streamManifest],
+                summary: streamSummary,
+            };
+
+            await fs.ensureDir(this.outputDir);
+            await fs.writeJson(path.join(this.outputDir, "manifest.json"), manifest, { spaces: 2 });
+
+            logger.info(`${logPrefix} Sync complete. Created=${streamSummary.created} Updated=${streamSummary.updated} ` +
+                `Reuploaded=${streamSummary.reuploaded} Deleted=${streamSummary.deleted} ` +
+                `Skipped=${streamSummary.skipped} Errors=${streamSummary.errors}`);
+
+            return manifest;
+        } finally {
+            await fs.remove(tmpDir).catch(() => undefined);
         }
-
-        const manifest: DocumentManifest = {
-            syncedAt: new Date().toISOString(),
-            streams: streamManifests,
-            summary: totalSummary,
-        };
-
-        await fs.ensureDir(this.outputDir);
-        await fs.writeJson(path.join(this.outputDir, "manifest.json"), manifest, { spaces: 2 });
-
-        // Cleanup tmp
-        await fs.remove(tmpDir).catch(() => undefined);
-
-        logger.info(`${logPrefix} Sync complete. Created=${totalSummary.created} Updated=${totalSummary.updated} ` +
-            `Reuploaded=${totalSummary.reuploaded} Deleted=${totalSummary.deleted} ` +
-            `Skipped=${totalSummary.skipped} Errors=${totalSummary.errors}`);
-
-        return manifest;
     }
 
     private async collectSourceEntries(stream: DocumentStream<unknown>, limit?: number): Promise<DocumentEntry[]> {
@@ -202,14 +214,15 @@ export abstract class DocumentTap<C> {
         tmpDir: string,
         dryRun: boolean,
     ): Promise<DocumentManifestEntry> {
-        const downloadPath = path.join(tmpDir, `${entry.externalId}.${entry.extension}`);
+        const safeId = entry.externalId.replace(/[/\\]/g, "_");
+        const downloadPath = path.join(tmpDir, `${safeId}.${entry.extension}`);
         try {
             await stream.downloadDocument(entry, downloadPath);
 
             if (!dryRun) {
                 await this.target.createDocument(stream.streamId, entry, downloadPath);
             } else {
-                const inspectPath = path.join(this.outputDir, stream.streamId, `${entry.externalId}.${entry.extension}`);
+                const inspectPath = path.join(this.outputDir, stream.streamId, `${safeId}.${entry.extension}`);
                 await fs.ensureDir(path.dirname(inspectPath));
                 await fs.copy(downloadPath, inspectPath);
             }
@@ -231,14 +244,15 @@ export abstract class DocumentTap<C> {
         tmpDir: string,
         dryRun: boolean,
     ): Promise<DocumentManifestEntry> {
-        const downloadPath = path.join(tmpDir, `${entry.externalId}.${entry.extension}`);
+        const safeId = entry.externalId.replace(/[/\\]/g, "_");
+        const downloadPath = path.join(tmpDir, `${safeId}.${entry.extension}`);
         try {
             await stream.downloadDocument(entry, downloadPath);
 
             if (!dryRun) {
                 await this.target.reuploadDocument(stream.streamId, existingDoc.id, entry, downloadPath);
             } else {
-                const inspectPath = path.join(this.outputDir, stream.streamId, `${entry.externalId}.${entry.extension}`);
+                const inspectPath = path.join(this.outputDir, stream.streamId, `${safeId}.${entry.extension}`);
                 await fs.ensureDir(path.dirname(inspectPath));
                 await fs.copy(downloadPath, inspectPath);
             }

@@ -84,6 +84,8 @@ export class WhalyDocumentTarget {
     async updateDocumentMetadata(docId: string, entry: DocumentEntry): Promise<void> {
         await this.service.updateDocument(docId, {
             file_name: entry.fileName,
+            original_file_name: entry.originalFileName,
+            original_file_path: entry.originalFilePath ?? "",
             original_author: entry.originalAuthor ?? "",
             valid_from: entry.validFrom ?? "",
             valid_until: entry.validUntil ?? "",

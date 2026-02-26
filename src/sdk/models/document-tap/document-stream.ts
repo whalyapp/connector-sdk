@@ -30,6 +30,8 @@ export abstract class DocumentStream<C> {
      */
     shouldUpdateMetadata(sourceEntry: DocumentEntry, existingDoc: WhalyDocument): boolean {
         if (sourceEntry.fileName !== existingDoc.file_name) return true;
+        if (sourceEntry.originalFileName !== existingDoc.original_file_name) return true;
+        if ((sourceEntry.originalFilePath ?? "") !== existingDoc.original_file_path) return true;
         if ((sourceEntry.validFrom ?? "") !== existingDoc.valid_from) return true;
         if ((sourceEntry.validUntil ?? "") !== existingDoc.valid_until) return true;
         if ((sourceEntry.originalAuthor ?? "") !== existingDoc.original_author) return true;

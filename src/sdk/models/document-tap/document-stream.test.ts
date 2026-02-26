@@ -61,16 +61,40 @@ describe("DocumentStream", () => {
             const stream = new TestStream();
             const entry: DocumentEntry = {
                 externalId: "ext-1", fileName: "test.pdf", originalFileName: "test.pdf",
+                originalFilePath: "/path/test.pdf",
                 extension: "pdf", validFrom: "2024-01-01", validUntil: "2025-01-01",
                 originalAuthor: "Author", metadata: {},
             };
             expect(stream.shouldUpdateMetadata(entry, makeWhalyDoc())).toBe(false);
         });
 
+        it("returns true when originalFileName differs", () => {
+            const stream = new TestStream();
+            const entry: DocumentEntry = {
+                externalId: "ext-1", fileName: "test.pdf", originalFileName: "renamed.pdf",
+                originalFilePath: "/path/test.pdf",
+                extension: "pdf", validFrom: "2024-01-01", validUntil: "2025-01-01",
+                originalAuthor: "Author", metadata: {},
+            };
+            expect(stream.shouldUpdateMetadata(entry, makeWhalyDoc())).toBe(true);
+        });
+
+        it("returns true when originalFilePath differs", () => {
+            const stream = new TestStream();
+            const entry: DocumentEntry = {
+                externalId: "ext-1", fileName: "test.pdf", originalFileName: "test.pdf",
+                originalFilePath: "/new-path/test.pdf",
+                extension: "pdf", validFrom: "2024-01-01", validUntil: "2025-01-01",
+                originalAuthor: "Author", metadata: {},
+            };
+            expect(stream.shouldUpdateMetadata(entry, makeWhalyDoc())).toBe(true);
+        });
+
         it("returns true when fileName differs", () => {
             const stream = new TestStream();
             const entry: DocumentEntry = {
                 externalId: "ext-1", fileName: "new-name.pdf", originalFileName: "test.pdf",
+                originalFilePath: "/path/test.pdf",
                 extension: "pdf", validFrom: "2024-01-01", validUntil: "2025-01-01",
                 originalAuthor: "Author", metadata: {},
             };
@@ -81,6 +105,7 @@ describe("DocumentStream", () => {
             const stream = new TestStream();
             const entry: DocumentEntry = {
                 externalId: "ext-1", fileName: "test.pdf", originalFileName: "test.pdf",
+                originalFilePath: "/path/test.pdf",
                 extension: "pdf", validFrom: "2024-01-01", validUntil: "2025-01-01",
                 originalAuthor: "Author", metadata: { tag: "new" },
             };
@@ -91,6 +116,7 @@ describe("DocumentStream", () => {
             const stream = new TestStream();
             const entry: DocumentEntry = {
                 externalId: "ext-1", fileName: "test.pdf", originalFileName: "test.pdf",
+                originalFilePath: "/path/test.pdf",
                 extension: "pdf", validFrom: "2024-06-01", validUntil: "2025-01-01",
                 originalAuthor: "Author", metadata: {},
             };

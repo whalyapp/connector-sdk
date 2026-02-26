@@ -49,15 +49,15 @@ class StubStream extends DocumentStream<{}> {
 // ---- Stub Tap ----
 
 class StubTap extends DocumentTap<{}> {
-    private stubStreams: DocumentStream<unknown>[];
+    private stubStream: DocumentStream<unknown>;
 
     constructor(streams: DocumentStream<unknown>[], outDir: string, concurrency?: number) {
         super({}, outDir, concurrency);
-        this.stubStreams = streams;
+        this.stubStream = streams[0]!;
     }
 
     async init() {
-        for (const s of this.stubStreams) this.streams.push(s);
+        this.stream = this.stubStream;
     }
 }
 
@@ -251,6 +251,16 @@ describe("DocumentTap", () => {
         const tap = new StubTap([stream], tmpDir);
 
         await expect(tap.sync()).rejects.toThrow("No target set");
+    });
+
+    it("throws if no stream is set in init()", async () => {
+        class NoStreamTap extends DocumentTap<{}> {
+            async init() { /* forgot to set this.stream */ }
+        }
+        const tap = new NoStreamTap({}, tmpDir);
+        tap.target = makeStubTarget([]);
+
+        await expect(tap.sync()).rejects.toThrow("No stream set");
     });
 
     it("respects shouldDelete escape hatch", async () => {

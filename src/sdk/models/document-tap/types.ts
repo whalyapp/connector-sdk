@@ -41,7 +41,7 @@ export interface WhalyDocument {
     valid_until: string;
     size_kb: number;
     storage: string;
-    metadata: Record<string, string>;
+    metadata: Record<string, string> | null;
 }
 
 /** Paginated response from the Whaly Document API. */

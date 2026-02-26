@@ -1,5 +1,6 @@
 import XLSX from "xlsx";
 import { Stream } from "../models/tap/stream";
+import { SchemaMessage } from "../models/messages";
 import { Schema } from "../models/schema";
 import { ReplicationMethod } from "../models/replication";
 import { InputTapState } from "../models/state";
@@ -69,10 +70,27 @@ export class FileStream extends Stream<Record<string, any>, FileStreamConfig> {
     async *_getRecords(): AsyncIterable<Record<string, any>> {
         // Pre-count total rows across all files before yielding any record
         let total = 0;
+        const cachedExcelData: Record<string, any>[][] = [];
+        let schemaEmitted = (await this.getSchema()) !== undefined;
+
         for (const filePath of this.localFilePaths) {
             if (this.config.format === FileFormat.EXCEL) {
                 const data = await extractExcelRows(filePath, this.config.excel);
+                cachedExcelData.push(data);
                 total += data.length;
+
+                // For processor configs, infer and emit schema from first non-empty batch
+                if (!schemaEmitted && data.length > 0) {
+                    const properties = Object.fromEntries(
+                        Object.keys(data[0]!).map(k => [k, { type: ['null', 'string'] }])
+                    );
+                    await this.target.schema(new SchemaMessage({
+                        stream: this.streamId,
+                        schema: { type: 'object', properties },
+                        keyProperties: this.primaryKey,
+                    }));
+                    schemaEmitted = true;
+                }
             } else if (this.config.format === FileFormat.CSV) {
                 total += await countCsvLines(filePath);
             }
@@ -80,17 +98,18 @@ export class FileStream extends Stream<Record<string, any>, FileStreamConfig> {
         this.totalRows = total;
 
         // Now yield records
-        for (const filePath of this.localFilePaths) {
-            if (this.config.format === FileFormat.EXCEL) {
-                const data = await extractExcelRows(filePath, this.config.excel);
+        if (this.config.format === FileFormat.EXCEL) {
+            for (const data of cachedExcelData) {
                 for (const row of data) {
                     yield row;
                 }
-            } else if (this.config.format === FileFormat.CSV) {
-                yield* rowGeneratorFromCsv(filePath, this.config.csv);
-            } else {
-                throw new Error(`FileStream: Unsupported format for stream ${this.streamId}`);
             }
+        } else if (this.config.format === FileFormat.CSV) {
+            for (const filePath of this.localFilePaths) {
+                yield* rowGeneratorFromCsv(filePath, this.config.csv);
+            }
+        } else {
+            throw new Error(`FileStream: Unsupported format for stream ${this.streamId}`);
         }
     }
 }

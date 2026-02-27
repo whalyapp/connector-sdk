@@ -5,6 +5,7 @@ import { runWithConcurrency } from "../../service/concurrency";
 import { isDryRun, getDryRunLimit } from "../../service/dryRun";
 import type { DocumentStream } from "./document-stream";
 import type { WhalyDocumentTarget } from "../document-target/whaly-document-target";
+import { DocumentDownloadSkipError } from "./errors";
 import type {
     DocumentEntry,
     WhalyDocument,
@@ -13,6 +14,21 @@ import type {
     DocumentStreamManifest,
     DocumentSummary,
 } from "./types";
+
+function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function getFileSizeLabel(filePath: string): Promise<string> {
+    try {
+        const stat = await fs.stat(filePath);
+        return formatFileSize(stat.size);
+    } catch {
+        return "unknown size";
+    }
+}
 import { emptyDocumentSummary, addDocumentSummaries } from "./types";
 
 const logPrefix = "[DocumentTap]";
@@ -229,8 +245,13 @@ export abstract class DocumentTap<C> {
 
             return { externalId: entry.externalId, fileName: entry.fileName, status: "created" };
         } catch (err) {
+            if (err instanceof DocumentDownloadSkipError) {
+                logger.warn(`${logPrefix} Skipped ${entry.externalId} (${entry.fileName}): ${err.message}`);
+                return { externalId: entry.externalId, fileName: entry.fileName, status: "skipped" };
+            }
             const message = err instanceof Error ? err.message : String(err);
-            logger.error(`${logPrefix} Failed to create ${entry.externalId}: ${message}`);
+            const sizeLabel = await getFileSizeLabel(downloadPath);
+            logger.error(`${logPrefix} Failed to create ${entry.externalId} (${entry.fileName}, ${sizeLabel}): ${message}`);
             return { externalId: entry.externalId, fileName: entry.fileName, status: "error", error: message };
         } finally {
             await fs.remove(downloadPath).catch(() => undefined);
@@ -259,8 +280,13 @@ export abstract class DocumentTap<C> {
 
             return { externalId: entry.externalId, fileName: entry.fileName, status: "reuploaded" };
         } catch (err) {
+            if (err instanceof DocumentDownloadSkipError) {
+                logger.warn(`${logPrefix} Skipped ${entry.externalId} (${entry.fileName}): ${err.message}`);
+                return { externalId: entry.externalId, fileName: entry.fileName, status: "skipped" };
+            }
             const message = err instanceof Error ? err.message : String(err);
-            logger.error(`${logPrefix} Failed to reupload ${entry.externalId}: ${message}`);
+            const sizeLabel = await getFileSizeLabel(downloadPath);
+            logger.error(`${logPrefix} Failed to reupload ${entry.externalId} (${entry.fileName}, ${sizeLabel}): ${message}`);
             return { externalId: entry.externalId, fileName: entry.fileName, status: "error", error: message };
         } finally {
             await fs.remove(downloadPath).catch(() => undefined);
@@ -274,7 +300,7 @@ export abstract class DocumentTap<C> {
     ): Promise<DocumentManifestEntry> {
         try {
             if (!dryRun) {
-                await this.target.updateDocumentMetadata(existingDoc.id, entry);
+                await this.target.updateDocumentMetadata(existingDoc.id, entry, existingDoc);
             }
             return { externalId: entry.externalId, fileName: entry.fileName, status: "updated" };
         } catch (err) {

@@ -64,6 +64,7 @@ export class WhalyDocumentTarget {
         const stat = await fs.stat(localFilePath);
 
         await this.service.updateDocument(docId, {
+            external_id: entry.externalId,
             file_name: entry.fileName,
             original_file_name: entry.originalFileName,
             original_file_path: entry.originalFilePath ?? "",
@@ -81,14 +82,19 @@ export class WhalyDocumentTarget {
     }
 
     /** Update only the metadata fields (no file re-upload). */
-    async updateDocumentMetadata(docId: string, entry: DocumentEntry): Promise<void> {
+    async updateDocumentMetadata(docId: string, entry: DocumentEntry, existingDoc: WhalyDocument): Promise<void> {
         await this.service.updateDocument(docId, {
+            external_id: entry.externalId,
             file_name: entry.fileName,
             original_file_name: entry.originalFileName,
             original_file_path: entry.originalFilePath ?? "",
             original_author: entry.originalAuthor ?? "",
+            extension: entry.extension,
+            file_path: existingDoc.file_path,
             valid_from: entry.validFrom ?? "",
             valid_until: entry.validUntil ?? "",
+            size_kb: existingDoc.size_kb,
+            storage: existingDoc.storage,
             metadata: entry.metadata ?? {},
         });
 

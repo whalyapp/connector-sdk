@@ -73,6 +73,7 @@ export * from "./sdk/models/asset-target/asset-target";
  * Document Tap / Target (document-level pipeline with reconciliation)
  */
 export * from "./sdk/models/document-tap/types";
+export * from "./sdk/models/document-tap/errors";
 export * from "./sdk/models/document-tap/document-stream";
 export * from "./sdk/models/document-tap/document-tap";
 export * from "./sdk/models/document-target/whaly-document-target";

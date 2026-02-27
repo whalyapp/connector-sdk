@@ -2,10 +2,21 @@ import axios, { AxiosError, AxiosInstance } from "axios";
 import axiosRetry from "axios-retry";
 import fs from "node:fs";
 import FormData from "form-data";
+import { Storage, type Bucket } from "@google-cloud/storage";
 import { logger } from "../sdk/service/logger";
 import { getApiEndpoint } from "../sdk/service/apiEndpoint";
 import { getServiceAccountKey } from "../sdk/service/serviceAccountKey";
 import type { WhalyDocument, WhalyPaginatedResponse } from "../sdk/models/document-tap/types";
+
+function enrichAxiosError(err: unknown): Error {
+    if (!axios.isAxiosError(err)) return err instanceof Error ? err : new Error(String(err));
+    const status = err.response?.status;
+    const body = err.response?.data;
+    const url = err.config?.url;
+    const method = err.config?.method?.toUpperCase();
+    const detail = typeof body === "string" ? body : JSON.stringify(body ?? "");
+    return new Error(`${method} ${url} failed with status ${status}: ${detail}`);
+}
 
 const logPrefix = "[WhalyDocumentService]";
 const MAX_RETRIES = 10;
@@ -28,11 +39,18 @@ export interface WhalyUploadResult {
 export class WhalyDocumentService {
     private axiosClient: AxiosInstance;
     readonly objectStorageId: string;
+    private gcsBucket: Bucket | undefined;
 
     constructor(config: WhalyDocumentServiceConfig) {
         const resolvedKey = getServiceAccountKey(config.serviceAccountKey);
         const resolvedEndpoint = getApiEndpoint(config.apiEndpoint);
         this.objectStorageId = config.objectStorageId;
+
+        const gcsBucketName = process.env["WLY_GCS_BUCKET"];
+        if (gcsBucketName) {
+            this.gcsBucket = new Storage().bucket(gcsBucketName);
+            logger.info(`${logPrefix} Using direct GCS upload to bucket: ${gcsBucketName}`);
+        }
 
         this.axiosClient = axios.create({
             baseURL: resolvedEndpoint,
@@ -92,35 +110,68 @@ export class WhalyDocumentService {
 
     /** Upload a file to object storage. Returns storage path and size. */
     async uploadFile(destinationPath: string, localFilePath: string, fileName: string): Promise<WhalyUploadResult> {
+        if (this.gcsBucket) {
+            return this.uploadFileViaGCS(destinationPath, localFilePath);
+        }
+        return this.uploadFileViaAPI(destinationPath, localFilePath, fileName);
+    }
+
+    private async uploadFileViaGCS(destinationPath: string, localFilePath: string): Promise<WhalyUploadResult> {
+        await this.gcsBucket!.upload(localFilePath, { destination: destinationPath });
+        const stat = await fs.promises.stat(localFilePath);
+        return {
+            storage: this.objectStorageId,
+            filePath: destinationPath,
+            sizeKb: Math.ceil(stat.size / 1024),
+        };
+    }
+
+    private async uploadFileViaAPI(destinationPath: string, localFilePath: string, fileName: string): Promise<WhalyUploadResult> {
         const form = new FormData();
         form.append("file", fs.createReadStream(localFilePath), fileName);
 
-        const response = await this.axiosClient.post(
-            `/v1/object-storages/${this.objectStorageId}/upload`,
-            form,
-            {
-                headers: form.getHeaders(),
-                params: { path: destinationPath },
-            },
-        );
+        try {
+            const response = await this.axiosClient.post(
+                `/v1/object-storages/${this.objectStorageId}/upload`,
+                form,
+                {
+                    headers: form.getHeaders(),
+                    params: { path: destinationPath },
+                },
+            );
 
-        return response.data.data ?? response.data;
+            return response.data.data ?? response.data;
+        } catch (err) {
+            throw enrichAxiosError(err);
+        }
     }
 
     /** Create a new document record. */
     async createDocument(payload: Omit<WhalyDocument, "id">): Promise<WhalyDocument> {
-        const response = await this.axiosClient.post("/v1/documents", payload);
-        return response.data.data ?? response.data;
+        try {
+            const response = await this.axiosClient.post("/v1/documents", payload);
+            return response.data.data ?? response.data;
+        } catch (err) {
+            throw enrichAxiosError(err);
+        }
     }
 
     /** Update an existing document record. */
     async updateDocument(id: string, payload: Partial<WhalyDocument>): Promise<WhalyDocument> {
-        const response = await this.axiosClient.put(`/v1/documents/${id}`, payload);
-        return response.data.data ?? response.data;
+        try {
+            const response = await this.axiosClient.put(`/v1/documents/${id}`, { id, ...payload });
+            return response.data.data ?? response.data;
+        } catch (err) {
+            throw enrichAxiosError(err);
+        }
     }
 
     /** Delete a document record. */
     async deleteDocument(id: string): Promise<void> {
-        await this.axiosClient.delete(`/v1/documents/${id}`);
+        try {
+            await this.axiosClient.delete(`/v1/documents/${id}`);
+        } catch (err) {
+            throw enrichAxiosError(err);
+        }
     }
 }

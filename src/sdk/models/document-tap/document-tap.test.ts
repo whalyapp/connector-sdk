@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import { DocumentTap } from "./document-tap";
 import { DocumentStream } from "./document-stream";
+import { DocumentDownloadSkipError } from "./errors";
 import type { DocumentEntry, WhalyDocument, DocumentManifest } from "./types";
 import type { WhalyDocumentTarget } from "../document-target/whaly-document-target";
 
@@ -286,6 +287,54 @@ describe("DocumentTap", () => {
         expect(manifest.summary.deleted).toBe(1);
         const deletedEntry = manifest.streams[0]?.documents.find(d => d.status === "deleted");
         expect(deletedEntry?.externalId).toBe("delete-me");
+    });
+
+    it("records skipped (not error) when downloadDocument throws DocumentDownloadSkipError during create", async () => {
+        const entries = [makeEntry("doc-1"), makeEntry("doc-2")];
+        const target = makeStubTarget([]);
+
+        class SkipStream extends StubStream {
+            async downloadDocument(entry: DocumentEntry, destPath: string): Promise<void> {
+                if (entry.externalId === "doc-1") {
+                    throw new DocumentDownloadSkipError("blob not available");
+                }
+                return super.downloadDocument(entry, destPath);
+            }
+        }
+
+        const stream = new SkipStream("test", entries);
+        const tap = new StubTap([stream], tmpDir);
+        tap.target = target;
+
+        const manifest = await tap.sync();
+
+        expect(manifest.summary.skipped).toBe(1);
+        expect(manifest.summary.created).toBe(1);
+        expect(manifest.summary.errors).toBe(0);
+        const skippedDoc = manifest.streams[0]?.documents.find(d => d.externalId === "doc-1");
+        expect(skippedDoc?.status).toBe("skipped");
+    });
+
+    it("records skipped (not error) when downloadDocument throws DocumentDownloadSkipError during reupload", async () => {
+        const entries = [makeEntry("doc-1")];
+        const existingDocs = [makeWhalyDoc("doc-1")];
+        const target = makeStubTarget(existingDocs);
+
+        class SkipStream extends StubStream {
+            async downloadDocument(_entry: DocumentEntry, _destPath: string): Promise<void> {
+                throw new DocumentDownloadSkipError("blob not available");
+            }
+        }
+
+        const stream = new SkipStream("test", entries, true);
+        const tap = new StubTap([stream], tmpDir);
+        tap.target = target;
+
+        const manifest = await tap.sync();
+
+        expect(manifest.summary.skipped).toBe(1);
+        expect(manifest.summary.reuploaded).toBe(0);
+        expect(manifest.summary.errors).toBe(0);
     });
 
     describe("DRY_RUN mode", () => {

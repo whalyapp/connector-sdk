@@ -14,11 +14,14 @@ import type {
     DocumentStreamManifest,
     DocumentSummary,
 } from "./types";
+import { emptyDocumentSummary, addDocumentSummaries } from "./types";
+
+const BYTES_PER_KB = 1024;
 
 function formatFileSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes < BYTES_PER_KB) return `${bytes} B`;
+    if (bytes < BYTES_PER_KB * BYTES_PER_KB) return `${(bytes / BYTES_PER_KB).toFixed(1)} KB`;
+    return `${(bytes / (BYTES_PER_KB * BYTES_PER_KB)).toFixed(1)} MB`;
 }
 
 async function getFileSizeLabel(filePath: string): Promise<string> {
@@ -29,7 +32,6 @@ async function getFileSizeLabel(filePath: string): Promise<string> {
         return "unknown size";
     }
 }
-import { emptyDocumentSummary, addDocumentSummaries } from "./types";
 
 const logPrefix = "[DocumentTap]";
 

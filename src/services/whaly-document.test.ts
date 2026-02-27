@@ -1,4 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 vi.mock("axios", () => {
     const mockInstance = {
@@ -8,13 +11,25 @@ vi.mock("axios", () => {
         delete: vi.fn(),
         interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
     };
+
+    const axiosDefault: any = { create: vi.fn(() => mockInstance) };
+    axiosDefault.isAxiosError = (err: any) => err?.isAxiosError === true;
     return {
-        default: { create: vi.fn(() => mockInstance) },
+        default: axiosDefault,
         __mockInstance: mockInstance,
     };
 });
 
 vi.mock("axios-retry", () => ({ default: vi.fn() }));
+
+const mockBucketUpload = vi.fn();
+vi.mock("@google-cloud/storage", () => {
+    function MockStorage() {
+        // @ts-ignore
+        return { bucket: vi.fn(() => ({ upload: mockBucketUpload })) };
+    }
+    return { Storage: MockStorage };
+});
 
 describe("WhalyDocumentService", () => {
     let service: any;
@@ -108,7 +123,7 @@ describe("WhalyDocumentService", () => {
 
             const result = await service.updateDocument("doc-1", payload);
 
-            expect(mockClient.put).toHaveBeenCalledWith("/v1/documents/doc-1", payload);
+            expect(mockClient.put).toHaveBeenCalledWith("/v1/documents/doc-1", { id: "doc-1", ...payload });
             expect(result.file_name).toBe("updated.pdf");
         });
     });
@@ -122,4 +137,90 @@ describe("WhalyDocumentService", () => {
             expect(mockClient.delete).toHaveBeenCalledWith("/v1/documents/doc-1");
         });
     });
+
+    describe("enrichAxiosError (via createDocument)", () => {
+        it("enriches AxiosError with method, url, status, and body", async () => {
+            const axiosErr: any = new Error("Request failed");
+            axiosErr.isAxiosError = true;
+            axiosErr.response = { status: 422, data: { error: "invalid" } };
+            axiosErr.config = { method: "post", url: "/v1/documents" };
+            mockClient.post.mockRejectedValueOnce(axiosErr);
+
+            await expect(service.createDocument({ file_name: "test.pdf" })).rejects.toThrow(
+                /POST \/v1\/documents failed with status 422/,
+            );
+        });
+
+        it("preserves original error as cause", async () => {
+            const axiosErr: any = new Error("Request failed");
+            axiosErr.isAxiosError = true;
+            axiosErr.response = { status: 500, data: "Internal Server Error" };
+            axiosErr.config = { method: "post", url: "/v1/documents" };
+            mockClient.post.mockRejectedValueOnce(axiosErr);
+
+            try {
+                await service.createDocument({ file_name: "test.pdf" });
+            } catch (err: any) {
+                expect(err.cause).toBe(axiosErr);
+            }
+        });
+
+        it("wraps non-Axios errors without enrichment", async () => {
+            mockClient.post.mockRejectedValueOnce(new Error("network down"));
+
+            await expect(service.createDocument({ file_name: "test.pdf" })).rejects.toThrow("network down");
+        });
+
+        it("wraps non-Error values as strings", async () => {
+            mockClient.post.mockRejectedValueOnce("something broke");
+
+            await expect(service.createDocument({ file_name: "test.pdf" })).rejects.toThrow("something broke");
+        });
+    });
+});
+
+describe("WhalyDocumentService (GCS upload)", () => {
+    let service: any;
+    let tmpFile: string;
+
+    beforeEach(async () => {
+        process.env["WLY_API_ENDPOINT"] = "https://test.whaly.io";
+        process.env["WLY_SERVICE_ACCOUNT_KEY"] = "sk:test-key";
+        process.env["WLY_GCS_BUCKET"] = "my-bucket";
+
+        vi.clearAllMocks();
+        mockBucketUpload.mockResolvedValue(undefined);
+
+        const mod = await import("./whaly-document");
+        service = new mod.WhalyDocumentService({ objectStorageId: "objst_test" });
+
+        tmpFile = path.join(os.tmpdir(), `gcs-test-${Date.now()}.txt`);
+        fs.writeFileSync(tmpFile, "hello world");
+    });
+
+    afterEach(() => {
+        delete process.env["WLY_GCS_BUCKET"];
+        fs.unlinkSync(tmpFile);
+    });
+
+    it("uploads via GCS when WLY_GCS_BUCKET is set", async () => {
+        const result = await service.uploadFile("dest/path.txt", tmpFile, "file.txt");
+
+        expect(mockBucketUpload).toHaveBeenCalledWith(tmpFile, { destination: "dest/path.txt" });
+        expect(result.storage).toBe("objst_test");
+        expect(result.filePath).toBe("dest/path.txt");
+        expect(result.sizeKb).toBeGreaterThanOrEqual(1);
+    });
+
+    it("retries on transient GCS failure", async () => {
+        mockBucketUpload
+            .mockRejectedValueOnce(new Error("transient"))
+            .mockResolvedValueOnce(undefined);
+
+        const result = await service.uploadFile("dest/path.txt", tmpFile, "file.txt");
+
+        expect(mockBucketUpload).toHaveBeenCalledTimes(2);
+        expect(result.filePath).toBe("dest/path.txt");
+    });
+
 });

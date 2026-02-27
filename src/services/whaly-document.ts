@@ -15,7 +15,7 @@ function enrichAxiosError(err: unknown): Error {
     const url = err.config?.url;
     const method = err.config?.method?.toUpperCase();
     const detail = typeof body === "string" ? body : JSON.stringify(body ?? "");
-    return new Error(`${method} ${url} failed with status ${status}: ${detail}`);
+    return new Error(`${method} ${url} failed with status ${status}: ${detail}`, { cause: err });
 }
 
 const logPrefix = "[WhalyDocumentService]";
@@ -117,7 +117,22 @@ export class WhalyDocumentService {
     }
 
     private async uploadFileViaGCS(destinationPath: string, localFilePath: string): Promise<WhalyUploadResult> {
-        await this.gcsBucket!.upload(localFilePath, { destination: destinationPath });
+        const bucket = this.gcsBucket;
+        if (!bucket) throw new Error("GCS bucket not configured");
+
+        const maxAttempts = MAX_RETRIES + 1;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                await bucket.upload(localFilePath, { destination: destinationPath });
+                break;
+            } catch (err) {
+                if (attempt === maxAttempts) throw err;
+                const delay = Math.min(1000 * 2 ** (attempt - 1), 30_000);
+                logger.info(`${logPrefix} GCS upload retry ${attempt}/${MAX_RETRIES} in ${delay}ms for ${destinationPath}`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+
         const stat = await fs.promises.stat(localFilePath);
         return {
             storage: this.objectStorageId,

@@ -91,15 +91,36 @@ describe("WhalyDocumentTarget", () => {
                 metadata: { key: "value" },
             };
 
-            await target.updateDocumentMetadata("doc-1", entry);
+            const existingDoc = {
+                id: "doc-1",
+                file_name: "old-name.pdf",
+                external_id: "ext-1",
+                original_file_name: "source-name.pdf",
+                original_file_path: "/docs/source-name.pdf",
+                original_author: "Author",
+                extension: "pdf",
+                file_path: "stream/old-name.pdf",
+                valid_from: "",
+                valid_until: "",
+                size_kb: 42,
+                storage: "storage-1",
+                metadata: {},
+            };
+
+            await target.updateDocumentMetadata("doc-1", entry, existingDoc);
 
             expect(mockService.updateDocument).toHaveBeenCalledWith("doc-1", {
+                external_id: "ext-1",
                 file_name: "new-name.pdf",
                 original_file_name: "source-name.pdf",
                 original_file_path: "/docs/source-name.pdf",
                 original_author: "Author",
+                extension: "pdf",
+                file_path: "stream/old-name.pdf",
                 valid_from: "2026-01-01",
                 valid_until: "2027-01-01",
+                size_kb: 42,
+                storage: "storage-1",
                 metadata: { key: "value" },
             });
         });

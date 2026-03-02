@@ -3,9 +3,9 @@ import uniqueId from 'lodash/uniqueId.js';
 import { StreamId } from '../metadata';
 import { TempFile } from './models';
 
-export const createTemporaryFileStream = (streamId: StreamId): TempFile => {
-    fs.ensureDirSync("./tmp")
-    const path = `./tmp/${safePath(streamId)}-${uniqueId()}.tmp`;
+export const createTemporaryFileStream = (streamId: StreamId, tmpDir: string = "./tmp"): TempFile => {
+    fs.ensureDirSync(tmpDir)
+    const path = `${tmpDir}/${safePath(streamId)}-${uniqueId()}.ndjson`;
     const writeStream = fs.createWriteStream(path, {flags: "w"});
 
     return {

@@ -30,6 +30,8 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
     schemaHooks: TargetSchemaHook[]
     syncTime: Dayjs;
     stateProvider: StateProvider;
+    readonly outputDir: string;
+    readonly tmpDir: string;
 
     // Latest state message received from the Tap
     // Not yet flushed as we didn't upload the stream data since receiving it 
@@ -54,6 +56,9 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
         this.syncedAtColumnUseLegacyStringType = config.syncedAtColumnUseLegacyStringType ?? false;
         this.stateProvider = stateProvider;
         this.schemaHooks = [];
+
+        this.outputDir = config.outputDir ?? "out";
+        this.tmpDir = path.join(this.outputDir, "tmp");
 
         this.streams = {}
 
@@ -239,7 +244,8 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
         this.streams[streamId] = new StreamState(
             streamId,
             dbSyncInstance,
-            replicationMethod || ReplicationMethod.FULL_TABLE
+            replicationMethod || ReplicationMethod.FULL_TABLE,
+            this.tmpDir
         );
     }
 
@@ -387,8 +393,8 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
 
         try {
             if (isDryRun()) {
-                logger.info(`[DRY_RUN] Data Extraction is complete. Copying tmp files to out/ instead of loading to warehouse.`);
-                const outDir = path.resolve("out");
+                logger.info(`[DRY_RUN] Data Extraction is complete. Copying tmp files to ${this.outputDir}/ instead of loading to warehouse.`);
+                const outDir = path.resolve(this.outputDir);
                 await fs.ensureDir(outDir);
 
                 for (const streamId of Object.keys(this.streams)) {
@@ -410,10 +416,10 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
                     const destPath = path.join(outDir, `${safePath(streamId)}.ndjson`);
                     await fs.copy(fileToLoad.path, destPath);
                     logger.info(`[DRY_RUN] Stream: ${streamId} - Copied ${streamState.getBatchedRowCount()} records to ${destPath}`);
-
-                    // Clean up tmp file
-                    await fs.remove(fileToLoad.path);
                 }
+
+                // Clean up tmp directory
+                await fs.remove(path.resolve(this.tmpDir));
 
                 return;
             }
@@ -421,6 +427,12 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
             logger.info(`👍 Data Extraction is complete. Will load remaining batched stream records.`)
 
             await this.loadAllStreamsInWarehouse({ isFinalLoad: true });
+
+            this.logSyncSummary();
+
+            // Clean up tmp directory
+            await fs.remove(path.resolve(this.tmpDir));
+
             return Promise.resolve();
         } catch (err) {
             logger.error(`Error while handling complete event.`)
@@ -497,6 +509,21 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
         }
     }
 
+    private logSyncSummary = () => {
+        const streamIds = Object.keys(this.streams);
+        if (streamIds.length === 0) return;
+
+        logger.info(`📊 Sync summary:`);
+        for (const streamId of streamIds) {
+            const streamState = this.streams[streamId];
+            if (!streamState) continue;
+            const totalRows = streamState.syncedRowCount;
+            if (totalRows > 0) {
+                logger.info(`  - ${streamId}: ${totalRows} rows synced`);
+            }
+        }
+    }
+
     static uploadSingleStreamToWarehouse = async (
         streamState: StreamState
     ) => {
@@ -506,6 +533,8 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
         try {
             const replicationMethod = streamState.getReplicationMethod();
             const fileToLoad = streamState.getFileToLoad();
+
+            logger.info(`StreamId=${dbSync.streamId} - Uploading ${streamState.getBatchedRowCount()} rows from ${fileToLoad.path}`);
 
             await dbSync.createStagingArea();
             await dbSync.loadStreamInStagingArea(fileToLoad.path);

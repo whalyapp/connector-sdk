@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   fieldTypeToJsonSchema,
+  coerceCellValue,
   excelFieldsToJsonSchema,
   csvFieldsToJsonSchema,
   extractPrimaryKeysFromCsvConfig,
@@ -31,6 +32,99 @@ describe("fieldTypeToJsonSchema", () => {
   it("falls back to nullable string for unknown types", () => {
     expect(fieldTypeToJsonSchema("UNKNOWN" as any)).toEqual({
       type: ["null", "string"],
+    });
+  });
+});
+
+describe("coerceCellValue", () => {
+  describe("STRING", () => {
+    it("converts number to string", () => {
+      expect(coerceCellValue(42, "STRING")).toBe("42");
+    });
+
+    it("converts 0 to '0' (not null)", () => {
+      expect(coerceCellValue(0, "STRING")).toBe("0");
+    });
+
+    it("converts boolean true to 'true'", () => {
+      expect(coerceCellValue(true, "STRING")).toBe("true");
+    });
+
+    it("converts boolean false to 'false'", () => {
+      expect(coerceCellValue(false, "STRING")).toBe("false");
+    });
+
+    it("keeps strings as-is", () => {
+      expect(coerceCellValue("hello", "STRING")).toBe("hello");
+    });
+
+    it("returns null for undefined", () => {
+      expect(coerceCellValue(undefined, "STRING")).toBeNull();
+    });
+
+    it("returns null for null", () => {
+      expect(coerceCellValue(null, "STRING")).toBeNull();
+    });
+  });
+
+  describe("FLOAT", () => {
+    it("keeps numbers as-is", () => {
+      expect(coerceCellValue(3.14, "FLOAT")).toBe(3.14);
+    });
+
+    it("keeps 0 as 0 (not null)", () => {
+      expect(coerceCellValue(0, "FLOAT")).toBe(0);
+    });
+
+    it("parses numeric string to number", () => {
+      expect(coerceCellValue("42.5", "FLOAT")).toBe(42.5);
+    });
+
+    it("returns null for non-numeric string", () => {
+      expect(coerceCellValue("abc", "FLOAT")).toBeNull();
+    });
+
+    it("converts boolean true to 1", () => {
+      expect(coerceCellValue(true, "FLOAT")).toBe(1);
+    });
+
+    it("converts boolean false to 0", () => {
+      expect(coerceCellValue(false, "FLOAT")).toBe(0);
+    });
+
+    it("returns null for undefined", () => {
+      expect(coerceCellValue(undefined, "FLOAT")).toBeNull();
+    });
+
+    it("returns null for null", () => {
+      expect(coerceCellValue(null, "FLOAT")).toBeNull();
+    });
+  });
+
+  describe("TIMESTAMP", () => {
+    it("converts Date to ISO string", () => {
+      const d = new Date("2024-01-15T12:30:00.000Z");
+      expect(coerceCellValue(d, "TIMESTAMP")).toBe("2024-01-15T12:30:00.000Z");
+    });
+
+    it("keeps string as-is", () => {
+      expect(coerceCellValue("2024-01-15", "TIMESTAMP")).toBe("2024-01-15");
+    });
+
+    it("returns null for empty string", () => {
+      expect(coerceCellValue("", "TIMESTAMP")).toBeNull();
+    });
+
+    it("converts number to string fallback", () => {
+      expect(coerceCellValue(12345, "TIMESTAMP")).toBe("12345");
+    });
+
+    it("returns null for undefined", () => {
+      expect(coerceCellValue(undefined, "TIMESTAMP")).toBeNull();
+    });
+
+    it("returns null for null", () => {
+      expect(coerceCellValue(null, "TIMESTAMP")).toBeNull();
     });
   });
 });

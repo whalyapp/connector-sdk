@@ -4,6 +4,7 @@ import { format } from "util";
 import { CsvFileConfig, CsvFieldsArrayConfig, CsvFieldsDictConfig } from "../types";
 import { Readable, Transform } from "stream";
 import * as iconv from "iconv-lite";
+import { coerceCellValue } from "../schema-utils";
 
 const logPrefix = "[csvReader]";
 
@@ -82,7 +83,7 @@ export async function* rowGeneratorFromCsv(
                     const rawValue = keyGenerator.valueTransformer
                         ? keyGenerator.valueTransformer(row[key])
                         : row[key];
-                    rowData[keyGenerator.key] = rawValue === "" ? null : rawValue;
+                    rowData[keyGenerator.key] = rawValue === "" ? null : coerceCellValue(rawValue, keyGenerator.type);
                 }
                 yield rowData;
             } else {
@@ -94,7 +95,7 @@ export async function* rowGeneratorFromCsv(
                     const rawValue = keyGenerator.valueTransformer
                         ? keyGenerator.valueTransformer(row[i])
                         : row[i];
-                    rowData[keyGenerator.key] = rawValue === "" ? null : rawValue;
+                    rowData[keyGenerator.key] = rawValue === "" ? null : coerceCellValue(rawValue, keyGenerator.type);
                 }
                 yield rowData;
             }

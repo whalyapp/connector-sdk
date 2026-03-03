@@ -30,6 +30,39 @@ export function fieldTypeToJsonSchema(fieldType: FieldType): JsonSchemaProperty 
 }
 
 /**
+ * Coerces a raw cell value to match the declared FieldType at runtime.
+ */
+export function coerceCellValue(
+    value: unknown,
+    fieldType: FieldType,
+): string | number | null {
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    switch (fieldType) {
+        case "STRING":
+            return String(value);
+        case "FLOAT": {
+            if (typeof value === "number") return value;
+            if (typeof value === "boolean") return value ? 1 : 0;
+            if (typeof value === "string") {
+                const parsed = Number(value);
+                return isNaN(parsed) ? null : parsed;
+            }
+            return null;
+        }
+        case "TIMESTAMP": {
+            if (value instanceof Date) return value.toISOString();
+            if (typeof value === "string") return value === "" ? null : value;
+            return String(value);
+        }
+        default:
+            return String(value);
+    }
+}
+
+/**
  * Convert an ExcelFieldMapping to a JSON Schema properties object.
  */
 export function excelFieldsToJsonSchema(fields: ExcelFieldMapping): {

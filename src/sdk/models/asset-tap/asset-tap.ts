@@ -1,7 +1,7 @@
 import fs from "fs-extra";
 import path from "node:path";
 import { logger } from "../../service/logger";
-import { getMimeType } from "../../service/mime";
+import { getMimeType, getExtension } from "../../service/mime";
 import { processFromAsyncIterable } from "../../service/concurrency";
 import type { AssetTarget } from "../asset-target/asset-target";
 import type { AssetStream } from "./asset-stream";
@@ -131,6 +131,15 @@ export abstract class AssetTap<C> {
                             const inspectPath = path.join(this.outputDir, stream.streamId, entry.destinationPath);
                             await fs.ensureDir(path.dirname(inspectPath));
                             await fs.copy(uploadPath, inspectPath);
+
+                            // Save the original (pre-transform) file for before/after comparison
+                            if (wasTransformed) {
+                                const baseName = path.basename(entry.destinationPath, path.extname(entry.destinationPath));
+                                const origExt = getExtension(entry.contentType);
+                                const originalPath = path.join(this.outputDir, "originals", `${baseName}${origExt}`);
+                                await fs.ensureDir(path.dirname(originalPath));
+                                await fs.copy(downloadedPath, originalPath);
+                            }
                         }
 
                         assetEntries.push({

@@ -35,3 +35,21 @@ export function getMimeType(filePathOrExt: string): string {
         : path.extname(filePathOrExt).toLowerCase();
     return MIME_TYPES[ext] ?? "application/octet-stream";
 }
+
+/** Reverse lookup: MIME type → preferred extension (with leading dot). */
+const EXTENSION_BY_MIME: Record<string, string> = Object.entries(MIME_TYPES).reduce(
+    (acc, [ext, mime]) => {
+        // Keep the first (preferred) extension per MIME type
+        if (!acc[mime]) acc[mime] = ext;
+        return acc;
+    },
+    {} as Record<string, string>,
+);
+
+/**
+ * Look up the preferred file extension for a MIME type.
+ * Returns `.bin` when the MIME type is unknown.
+ */
+export function getExtension(mimeType: string): string {
+    return EXTENSION_BY_MIME[mimeType] ?? ".bin";
+}

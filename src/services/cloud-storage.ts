@@ -4,6 +4,7 @@ import * as pathModule from "path";
 import { existsSync, mkdirSync, unlinkSync } from "fs";
 import { randomUUID } from "crypto";
 import { logger } from "../sdk/service/logger";
+import { StorageService } from "./storage";
 
 const logPrefix = "[CloudStorageService]";
 const tmpDir = "tmp";
@@ -11,20 +12,18 @@ const tmpDir = "tmp";
 export interface CloudStorageServiceOptions {
     processedSuffix?: string;
     supportedExtensions?: string[];
-    localMode?: boolean;
 }
 
 /**
- * Service for interacting with Google Cloud Storage.
+ * Google Cloud Storage implementation of StorageService.
  * Supports file download, upload, listing, and marker-file-based processing tracking.
  */
-export class CloudStorageService {
+export class CloudStorageService implements StorageService {
     private storage: Storage;
     private bucket: ReturnType<Storage["bucket"]>;
     private processedSuffix: string;
     private supportedExtensions: string[];
     private path: string | undefined;
-    private localMode: boolean;
 
     constructor(
         bucketName: string,
@@ -36,7 +35,6 @@ export class CloudStorageService {
         this.path = path;
         this.processedSuffix = opts?.processedSuffix ?? ".processed";
         this.supportedExtensions = opts?.supportedExtensions ?? [];
-        this.localMode = opts?.localMode ?? false;
     }
 
     /**
@@ -173,28 +171,13 @@ export class CloudStorageService {
     }
 
     /**
-     * Resolves a file URI to a local file path.
-     * - In local mode: resolves the path locally and returns it (no GCS interaction).
-     * - Otherwise: treats it as a GCS object path and downloads it from the configured bucket.
+     * Resolves a file URI to a local file path by downloading it from the configured GCS bucket.
      *
      * @example
-     * // GCS mode (default)
      * const storage = new CloudStorageService("my-bucket", "my-folder");
      * const localPath = await storage.resolveFileUri("folder/file.xlsx");
-     *
-     * // Local mode (set LOCAL_FILE=true in connector .env)
-     * const storage = new CloudStorageService("my-bucket", "my-folder", { localMode: true });
-     * const localPath = await storage.resolveFileUri("/tmp/file.xlsx");
      */
     async resolveFileUri(fileUri: string): Promise<string> {
-        if (this.localMode) {
-            const resolved = pathModule.resolve(fileUri);
-            if (!existsSync(resolved)) {
-                throw new Error(`Local file not found: ${resolved}`);
-            }
-            logger.info(`${logPrefix} File URI resolved to local path: ${resolved}`);
-            return resolved;
-        }
         return this.downloadFile(fileUri, pathModule.basename(fileUri));
     }
 

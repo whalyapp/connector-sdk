@@ -4,6 +4,7 @@ import * as pathModule from "path";
 import { existsSync, mkdirSync, unlinkSync } from "fs";
 import { randomUUID } from "crypto";
 import { logger } from "../sdk/service/logger";
+import { StorageService } from "./storage";
 
 const logPrefix = "[CloudStorageService]";
 const tmpDir = "tmp";
@@ -14,10 +15,10 @@ export interface CloudStorageServiceOptions {
 }
 
 /**
- * Service for interacting with Google Cloud Storage.
+ * Google Cloud Storage implementation of StorageService.
  * Supports file download, upload, listing, and marker-file-based processing tracking.
  */
-export class CloudStorageService {
+export class CloudStorageService implements StorageService {
     private storage: Storage;
     private bucket: ReturnType<Storage["bucket"]>;
     private processedSuffix: string;
@@ -167,6 +168,17 @@ export class CloudStorageService {
         } catch (err: any) {
             throw new Error(format(`error writing GCS object gs://${this.bucket.name}/${objectPath}, err: %s`, err?.message));
         }
+    }
+
+    /**
+     * Resolves a file URI to a local file path by downloading it from the configured GCS bucket.
+     *
+     * @example
+     * const storage = new CloudStorageService("my-bucket", "my-folder");
+     * const localPath = await storage.resolveFileUri("folder/file.xlsx");
+     */
+    async resolveFileUri(fileUri: string): Promise<string> {
+        return this.downloadFile(fileUri, pathModule.basename(fileUri));
     }
 
     /**

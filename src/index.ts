@@ -56,7 +56,9 @@ export * from "./sdk/file-processing/index";
  * Services
  */
 export * from "./services/sftp";
+export * from "./services/storage";
 export * from "./services/cloud-storage";
+export * from "./services/local-storage";
 export * from "./services/zip";
 export * from "./services/cdn";
 

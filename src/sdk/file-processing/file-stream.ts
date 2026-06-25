@@ -13,6 +13,7 @@ import {
     CsvFileConfig,
 } from "./types";
 import { extractExcelRows } from "./excel/reader";
+import { rowGeneratorFromExcelSheet } from "./excel/stream-reader";
 import { rowGeneratorFromCsv, countCsvLines } from "./csv/reader";
 import { excelFieldsToJsonSchema, csvFieldsToJsonSchema, extractPrimaryKeysFromExcelFields, extractPrimaryKeysFromCsvConfig } from "./schema-utils";
 
@@ -68,6 +69,22 @@ export class FileStream extends Stream<Record<string, any>, FileStreamConfig> {
      * Pre-counts total rows across all files to enable percentage progress logging.
      */
     async *_getRecords(): AsyncIterable<Record<string, any>> {
+        // Streaming Excel: parse row-by-row instead of loading the workbook into
+        // memory. Required for sheets too large for SheetJS (~1M rows). The schema
+        // is known from the column config, so no pre-count / first-row inference is
+        // needed; totalRows stays undefined and progress logs omit the percentage.
+        if (
+            this.config.format === FileFormat.EXCEL &&
+            this.config.excel.type === "single-sheet-extraction" &&
+            this.config.excel.streaming === true
+        ) {
+            const excelConfig = this.config.excel;
+            for (const filePath of this.localFilePaths) {
+                yield* rowGeneratorFromExcelSheet(filePath, excelConfig);
+            }
+            return;
+        }
+
         // Pre-count total rows across all files before yielding any record
         let total = 0;
         const cachedExcelData: Record<string, any>[][] = [];

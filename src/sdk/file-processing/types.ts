@@ -59,6 +59,18 @@ export interface ExcelSingleSheetExtractionConfig extends ExcelExtractionBaseCon
     columns: ExcelFieldMapping;
     sheetName?: string;
     numberOfRowsToSkip: number;
+    /**
+     * When true, the sheet is parsed row-by-row with a streaming reader (exceljs)
+     * instead of being fully loaded into memory by SheetJS.
+     *
+     * Use this for very large workbooks: SheetJS materializes each worksheet's XML
+     * as a single JS string and silently drops any sheet whose XML exceeds Node's
+     * max string length (~0.5 GB), which happens around the 1M-row Excel ceiling.
+     * Streaming keeps memory bounded (~tens of MB) regardless of sheet size.
+     *
+     * Only supported for single-sheet-extraction.
+     */
+    streaming?: boolean;
 }
 
 // ─── CSV Types ─────────────────────────────────────────────────────────

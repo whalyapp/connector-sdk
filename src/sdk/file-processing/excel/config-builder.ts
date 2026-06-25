@@ -69,6 +69,20 @@ export class ExcelExtractionConfigBuilder {
         return this;
     }
 
+    /**
+     * Enable streaming (row-by-row) parsing of the sheet instead of loading the
+     * whole workbook into memory. Required for very large sheets (close to or at
+     * Excel's ~1M-row ceiling) that SheetJS cannot parse because the worksheet XML
+     * exceeds Node's max string length. Only valid for single-sheet-extraction.
+     */
+    streaming(enabled: boolean = true): ExcelExtractionConfigBuilder {
+        if (this.config.type !== "single-sheet-extraction") {
+            throw new Error("streaming() can only be set for single-sheet-extraction; call singleSheet() first");
+        }
+        (this.config as ExcelSingleSheetExtractionConfig).streaming = enabled;
+        return this;
+    }
+
     processor(processorFn: (workbook: WorkBook) => Promise<Record<string, string>[]>): ExcelExtractionConfigBuilder {
         this.config.type = "processor";
         (this.config as ExcelCustomExtractorConfig).processor = processorFn;

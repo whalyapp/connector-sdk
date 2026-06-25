@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-25
+
+### Added
+
+- **Streaming Excel reader**: New `.streaming()` option on `ExcelExtractionConfigBuilder`
+  (single-sheet extraction) parses a worksheet row-by-row instead of loading the
+  whole workbook into memory.
+  - Handles sheets too large for SheetJS, which materializes each worksheet's XML
+    as a single JS string and silently drops any sheet whose XML exceeds Node's
+    ~0.5 GB max string length (around Excel's ~1,048,576-row ceiling). The previous
+    symptom was a misleading `Sheet <name> not found in workbook` error.
+  - Memory stays bounded (~tens of MB) regardless of sheet size; verified on a
+    2.3 GB / 1,043,058-row worksheet at ~0.15 GB peak RSS.
+  - Implemented with `yauzl` (random-access zip — independent of archive entry
+    order) + `saxes` (streaming SAX). Adds `yauzl` and `saxes` as dependencies.
+  - Exposes `rowGeneratorFromExcelSheet()` and wires the streaming path into
+    `FileStream` (no in-memory pre-count; progress logs omit the row percentage).
+  - Preserves the in-memory reader's semantics: `numberOfRowsToSkip`, lowest-column
+    stop rule, type coercion, and derived (`variableName`) fields.
+
 ## [0.3.0] - 2025-02-10
 
 ### Added

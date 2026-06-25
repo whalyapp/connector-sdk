@@ -6,6 +6,7 @@ export * from "./schema-utils";
 
 // Excel
 export * from "./excel/reader";
+export * from "./excel/stream-reader";
 export * from "./excel/config-builder";
 
 // CSV

@@ -1,6 +1,6 @@
 {
   "name": "@whaly/connector-sdk",
-  "version": "0.3.11",
+  "version": "0.4.0",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -64,10 +64,12 @@
     "jsonschema": "^1.5.0",
     "lodash": "^4.17.21",
     "qs": "^6.13.0",
+    "saxes": "^5.0.1",
     "sharp": "^0.34.5",
     "ssh2-sftp-client": "^12.0.0",
     "winston": "^3.18.3",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "yauzl": "^2.10.0"
   },
   "devDependencies": {
     "@types/async-retry": "^1.4.9",
@@ -79,6 +81,7 @@
     "@types/qs": "^6.14.0",
     "@types/sharp": "^0.31.1",
     "@types/ssh2-sftp-client": "^9.0.4",
+    "@types/yauzl": "^2.10.3",
     "rimraf": "^5.0.10",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",

@@ -209,12 +209,41 @@ Builder methods:
 | `extension(ext)` | Set the file extension |
 | `tableName(name)` | Set the output table name (string or function) |
 | `singleSheet(sheetName?, skipRows?)` | Configure single-sheet extraction mode |
+| `streaming(enabled?)` | Stream the sheet row-by-row instead of loading the whole workbook (single-sheet only) |
 | `processor(fn)` | Configure custom processor mode |
 | `fileValidator(fn)` | Set filename validation function |
 | `variablesExtractor(fn)` | Set variable extraction function |
 | `replicationMethod(method)` | Set replication method |
 | `columns(mapping)` | Set column mapping (single-sheet mode only) |
 | `build()` | Returns the final `ExcelExtractionConfig` |
+
+### Streaming large sheets
+
+By default the Excel reader loads the entire workbook into memory via SheetJS.
+SheetJS materializes each worksheet's XML as a single JavaScript string, so it
+**silently drops** any sheet whose XML exceeds Node's max string length (~0.5 GB)
+— which happens around Excel's ~1,048,576-row ceiling. The symptom is a
+misleading `Sheet <name> not found in workbook` error even though the sheet
+exists.
+
+For such workbooks, enable streaming on a single-sheet extraction:
+
+```typescript
+const config = ExcelExtractionConfigBuilder.create()
+  .extension("xlsx")
+  .tableName("big_table")
+  .singleSheet("Data", 1)
+  .streaming() // parse row-by-row; memory stays bounded (~tens of MB)
+  .columns({ /* ... */ })
+  .build();
+```
+
+The streaming reader parses the target worksheet directly (yauzl + SAX), so it is
+independent of the archive's internal entry order and keeps memory bounded
+regardless of sheet size. It supports the same `numberOfRowsToSkip`, lowest-column
+stop rule, type coercion and derived (`variableName`) fields as the in-memory
+reader. Streaming is only available for single-sheet extraction (not `processor`
+configs, which need the full workbook).
 
 ---
 

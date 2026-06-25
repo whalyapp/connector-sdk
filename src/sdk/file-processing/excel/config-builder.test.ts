@@ -43,6 +43,43 @@ describe("ExcelExtractionConfigBuilder", () => {
     ).toThrow(/type must be specified/);
   });
 
+  it("sets the streaming flag on a single-sheet config", () => {
+    const config = ExcelExtractionConfigBuilder.create()
+      .extension("xlsx")
+      .tableName("my_table")
+      .singleSheet("Sheet1", 1)
+      .streaming()
+      .columns({ name: { type: "STRING", column: "A" } })
+      .build();
+
+    expect(config.type).toBe("single-sheet-extraction");
+    if (config.type === "single-sheet-extraction") {
+      expect(config.streaming).toBe(true);
+    }
+  });
+
+  it("leaves streaming undefined by default", () => {
+    const config = ExcelExtractionConfigBuilder.create()
+      .extension("xlsx")
+      .tableName("my_table")
+      .singleSheet("Sheet1", 1)
+      .columns({ name: { type: "STRING", column: "A" } })
+      .build();
+
+    if (config.type === "single-sheet-extraction") {
+      expect(config.streaming).toBeUndefined();
+    }
+  });
+
+  it("throws when streaming() called before singleSheet()", () => {
+    expect(() =>
+      ExcelExtractionConfigBuilder.create()
+        .extension("xlsx")
+        .tableName("my_table")
+        .streaming()
+    ).toThrow(/only be set for single-sheet/);
+  });
+
   it("throws when columns() called for non-single-sheet", () => {
     expect(() =>
       ExcelExtractionConfigBuilder.create()

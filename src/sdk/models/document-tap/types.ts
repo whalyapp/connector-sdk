@@ -42,6 +42,12 @@ export interface WhalyDocument {
     size_kb: number;
     storage: string;
     metadata: Record<string, string> | null;
+    /**
+     * The document source this document belongs to.
+     * `null` means the org's default source. On create this field is optional —
+     * when omitted the document is attached to the default source.
+     */
+    document_source_id: string | null;
 }
 
 /** Paginated response from the Whaly Document API. */

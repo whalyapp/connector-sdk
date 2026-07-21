@@ -28,6 +28,21 @@ export interface WhalyDocumentServiceConfig {
     serviceAccountKey?: string;
     /** Object storage ID for file uploads. */
     objectStorageId: string;
+    /**
+     * Restrict the sync to these document source IDs.
+     *
+     * When set (non-empty):
+     *  - `listExistingDocuments()` only returns documents belonging to these
+     *    sources. This scopes the whole reconciliation (create / update /
+     *    delete), so the connector NEVER touches documents from other sources —
+     *    important because the DocumentTap deletes any org document not present
+     *    in the source.
+     *  - New documents are created inside the FIRST configured ID.
+     *
+     * When empty or omitted, the connector manages ALL documents in the org and
+     * creates new documents in the org's default source (previous behaviour).
+     */
+    documentSourceIds?: string[];
 }
 
 export interface WhalyUploadResult {
@@ -83,14 +98,19 @@ export class WhalyDocumentService {
         });
     }
 
-    /** Fetch all documents from the API, handling cursor-based pagination. */
-    async listAllDocuments(): Promise<WhalyDocument[]> {
+    /**
+     * Fetch all documents from the API, handling cursor-based pagination.
+     * When `documentSourceId` is provided, only documents belonging to that
+     * source are returned (server-side filter).
+     */
+    async listAllDocuments(documentSourceId?: string): Promise<WhalyDocument[]> {
         const documents: WhalyDocument[] = [];
         let after: string | undefined;
 
         while (true) {
             const params: Record<string, string> = {};
             if (after) params["after"] = after;
+            if (documentSourceId) params["document_source_id"] = documentSourceId;
 
             const response = await this.axiosClient.get<WhalyPaginatedResponse<WhalyDocument>>(
                 "/v1/documents",

@@ -9,15 +9,44 @@ const logPrefix = "[WhalyDocumentTarget]";
 export class WhalyDocumentTarget {
     readonly config: WhalyDocumentServiceConfig;
     private service: WhalyDocumentService;
+    /** Document source IDs this target is scoped to (empty = all sources). */
+    private readonly documentSourceIds: string[];
+    /** Source new documents are created in (`null` = org default source). */
+    private readonly createSourceId: string | null;
 
     constructor(config: WhalyDocumentServiceConfig) {
         this.config = config;
         this.service = new WhalyDocumentService(config);
+        this.documentSourceIds = config.documentSourceIds ?? [];
+        this.createSourceId = this.documentSourceIds[0] ?? null;
+        if (this.documentSourceIds.length > 0) {
+            logger.info(
+                `${logPrefix} Scoped to document source(s): ${this.documentSourceIds.join(", ")}. ` +
+                `New documents will be created in ${this.createSourceId}.`,
+            );
+        }
     }
 
-    /** Fetch all existing documents from Whaly. */
+    /**
+     * Fetch existing documents from Whaly.
+     * When scoped to one or more document sources, only documents from those
+     * sources are returned — this bounds create/update/delete to those sources.
+     */
     async listExistingDocuments(): Promise<WhalyDocument[]> {
-        return this.service.listAllDocuments();
+        if (this.documentSourceIds.length === 0) {
+            return this.service.listAllDocuments();
+        }
+
+        const documents: WhalyDocument[] = [];
+        for (const sourceId of this.documentSourceIds) {
+            const docs = await this.service.listAllDocuments(sourceId);
+            documents.push(...docs);
+        }
+        logger.info(
+            `${logPrefix} Fetched ${documents.length} existing documents across ` +
+            `${this.documentSourceIds.length} scoped source(s)`,
+        );
+        return documents;
     }
 
     /**
@@ -46,6 +75,7 @@ export class WhalyDocumentTarget {
             size_kb: Math.ceil(stat.size / 1024),
             storage: uploadResult.storage,
             metadata: entry.metadata ?? {},
+            document_source_id: this.createSourceId,
         });
 
         logger.info(`${logPrefix} Created document: ${entry.externalId} (${entry.fileName})`);
@@ -53,8 +83,16 @@ export class WhalyDocumentTarget {
 
     /**
      * Re-upload the file and update the document record.
+     * `documentSourceId` preserves the document's current source (the API PUT
+     * requires this field — omitting it would move the doc to the default source).
      */
-    async reuploadDocument(streamId: string, docId: string, entry: DocumentEntry, localFilePath: string): Promise<void> {
+    async reuploadDocument(
+        streamId: string,
+        docId: string,
+        entry: DocumentEntry,
+        localFilePath: string,
+        documentSourceId?: string | null,
+    ): Promise<void> {
         const destinationPath = `${streamId}/${entry.externalId}.${entry.extension}`;
         const fileName = `${entry.externalId}.${entry.extension}`;
 
@@ -76,6 +114,7 @@ export class WhalyDocumentTarget {
             size_kb: Math.ceil(stat.size / 1024),
             storage: uploadResult.storage,
             metadata: entry.metadata ?? {},
+            document_source_id: documentSourceId === undefined ? this.createSourceId : documentSourceId,
         });
 
         logger.info(`${logPrefix} Re-uploaded document: ${entry.externalId} (${entry.fileName})`);
@@ -96,6 +135,7 @@ export class WhalyDocumentTarget {
             size_kb: existingDoc.size_kb,
             storage: existingDoc.storage,
             metadata: entry.metadata ?? {},
+            document_source_id: existingDoc.document_source_id,
         });
 
         logger.info(`${logPrefix} Updated metadata for document: ${entry.externalId} (${entry.fileName})`);

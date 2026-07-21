@@ -273,7 +273,7 @@ export abstract class DocumentTap<C> {
             await stream.downloadDocument(entry, downloadPath);
 
             if (!dryRun) {
-                await this.target.reuploadDocument(stream.streamId, existingDoc.id, entry, downloadPath);
+                await this.target.reuploadDocument(stream.streamId, existingDoc.id, entry, downloadPath, existingDoc.document_source_id);
             } else {
                 const inspectPath = path.join(this.outputDir, stream.streamId, `${safeId}.${entry.extension}`);
                 await fs.ensureDir(path.dirname(inspectPath));

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.12]
+
+### Added
+
+- **Document source scoping** for the document pipeline (`WhalyDocumentTarget` / `WhalyDocumentService`):
+  - New `documentSourceIds?: string[]` option on `WhalyDocumentServiceConfig`. When set, the target only
+    lists (and therefore only creates / updates / **deletes**) documents belonging to those document sources —
+    so a connector can safely manage a subset of an org's documents without touching documents from other sources.
+  - New documents are created inside the **first** configured source ID; when no IDs are configured they attach
+    to the org's default source (previous behaviour — fully backward-compatible).
+  - `WhalyDocumentService.listAllDocuments(documentSourceId?)` now supports the API's `document_source_id`
+    server-side filter.
+  - Added the `document_source_id` field to the `WhalyDocument` type. Re-uploads and metadata updates now
+    preserve each document's existing source.
+
 ## [0.3.0] - 2025-02-10
 
 ### Added

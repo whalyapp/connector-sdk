@@ -41,7 +41,7 @@ describe("WhalyDocumentService", () => {
 
         vi.clearAllMocks();
         const mod = await import("./whaly-document");
-        service = new mod.WhalyDocumentService({ objectStorageId: "objst_test" });
+        service = new mod.WhalyDocumentService({ objectStorageId: "objst_test", documentSourceId: "docsrc_test" });
 
         // Access the mock axios instance
         const axiosMod = await import("axios");
@@ -65,7 +65,7 @@ describe("WhalyDocumentService", () => {
 
             expect(docs).toHaveLength(2);
             expect(mockClient.get).toHaveBeenCalledTimes(1);
-            expect(mockClient.get).toHaveBeenCalledWith("/v1/documents", { params: {} });
+            expect(mockClient.get).toHaveBeenCalledWith("/v1/documents", { params: { document_source_id: "docsrc_test" } });
         });
 
         it("handles cursor-based pagination", async () => {
@@ -87,7 +87,7 @@ describe("WhalyDocumentService", () => {
 
             expect(docs).toHaveLength(2);
             expect(mockClient.get).toHaveBeenCalledTimes(2);
-            expect(mockClient.get).toHaveBeenCalledWith("/v1/documents", { params: { after: "cursor-1" } });
+            expect(mockClient.get).toHaveBeenCalledWith("/v1/documents", { params: { document_source_id: "docsrc_test", after: "cursor-1" } });
         });
 
         it("returns empty array when no documents exist", async () => {
@@ -109,7 +109,7 @@ describe("WhalyDocumentService", () => {
 
             const result = await service.createDocument(payload);
 
-            expect(mockClient.post).toHaveBeenCalledWith("/v1/documents", payload);
+            expect(mockClient.post).toHaveBeenCalledWith("/v1/documents", { ...payload, document_source_id: "docsrc_test" });
             expect(result.id).toBe("new-1");
         });
     });
@@ -123,7 +123,7 @@ describe("WhalyDocumentService", () => {
 
             const result = await service.updateDocument("doc-1", payload);
 
-            expect(mockClient.put).toHaveBeenCalledWith("/v1/documents/doc-1", { id: "doc-1", ...payload });
+            expect(mockClient.put).toHaveBeenCalledWith("/v1/documents/doc-1", { id: "doc-1", ...payload, document_source_id: "docsrc_test" });
             expect(result.file_name).toBe("updated.pdf");
         });
     });
@@ -192,7 +192,7 @@ describe("WhalyDocumentService (GCS upload)", () => {
         mockBucketUpload.mockResolvedValue(undefined);
 
         const mod = await import("./whaly-document");
-        service = new mod.WhalyDocumentService({ objectStorageId: "objst_test" });
+        service = new mod.WhalyDocumentService({ objectStorageId: "objst_test", documentSourceId: "docsrc_test" });
 
         tmpFile = path.join(os.tmpdir(), `gcs-test-${Date.now()}.txt`);
         fs.writeFileSync(tmpFile, "hello world");

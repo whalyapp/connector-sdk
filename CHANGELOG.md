@@ -9,16 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Document source scoping** for the document pipeline (`WhalyDocumentTarget` / `WhalyDocumentService`):
-  - New `documentSourceIds?: string[]` option on `WhalyDocumentServiceConfig`. When set, the target only
-    lists (and therefore only creates / updates / **deletes**) documents belonging to those document sources —
-    so a connector can safely manage a subset of an org's documents without touching documents from other sources.
-  - New documents are created inside the **first** configured source ID; when no IDs are configured they attach
-    to the org's default source (previous behaviour — fully backward-compatible).
-  - `WhalyDocumentService.listAllDocuments(documentSourceId?)` now supports the API's `document_source_id`
-    server-side filter.
-  - Added the `document_source_id` field to the `WhalyDocument` type. Re-uploads and metadata updates now
-    preserve each document's existing source.
+- **Document source scoping** for the document pipeline (`WhalyDocumentService`). A document connector maps to
+  exactly one document source, and all of its operations are scoped to that source:
+  - New **required** `documentSourceId: string` field on `WhalyDocumentServiceConfig`.
+  - `listAllDocuments()` filters on the source via the API's `document_source_id` query param, so the
+    reconciliation (create / update / **delete**) never touches documents from other sources.
+  - Created and updated documents are always attached to the configured source (`document_source_id` is
+    injected by the service on POST/PUT).
+  - Added the `document_source_id` field to the `WhalyDocument` type.
+
+### Changed
+
+- **BREAKING**: `WhalyDocumentServiceConfig.documentSourceId` is now required. Any code constructing a
+  `WhalyDocumentService` / `WhalyDocumentTarget` must provide the document source ID it manages.
 
 ## [0.3.0] - 2025-02-10
 

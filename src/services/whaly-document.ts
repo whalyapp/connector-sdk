@@ -29,20 +29,15 @@ export interface WhalyDocumentServiceConfig {
     /** Object storage ID for file uploads. */
     objectStorageId: string;
     /**
-     * Restrict the sync to these document source IDs.
-     *
-     * When set (non-empty):
-     *  - `listExistingDocuments()` only returns documents belonging to these
-     *    sources. This scopes the whole reconciliation (create / update /
-     *    delete), so the connector NEVER touches documents from other sources —
-     *    important because the DocumentTap deletes any org document not present
-     *    in the source.
-     *  - New documents are created inside the FIRST configured ID.
-     *
-     * When empty or omitted, the connector manages ALL documents in the org and
-     * creates new documents in the org's default source (previous behaviour).
+     * The document source this connector manages. One connector maps to exactly
+     * one source. All operations are scoped to it:
+     *  - `listAllDocuments()` only returns documents belonging to this source,
+     *    so the reconciliation (create / update / **delete**) never touches
+     *    documents from other sources — important because the DocumentTap
+     *    deletes any listed document not present in the source.
+     *  - Created and updated documents are always attached to this source.
      */
-    documentSourceIds?: string[];
+    documentSourceId: string;
 }
 
 export interface WhalyUploadResult {
@@ -54,12 +49,14 @@ export interface WhalyUploadResult {
 export class WhalyDocumentService {
     private axiosClient: AxiosInstance;
     readonly objectStorageId: string;
+    readonly documentSourceId: string;
     private gcsBucket: Bucket | undefined;
 
     constructor(config: WhalyDocumentServiceConfig) {
         const resolvedKey = getServiceAccountKey(config.serviceAccountKey);
         const resolvedEndpoint = getApiEndpoint(config.apiEndpoint);
         this.objectStorageId = config.objectStorageId;
+        this.documentSourceId = config.documentSourceId;
 
         const gcsBucketName = process.env["WLY_GCS_BUCKET"];
         if (gcsBucketName) {
@@ -99,18 +96,17 @@ export class WhalyDocumentService {
     }
 
     /**
-     * Fetch all documents from the API, handling cursor-based pagination.
-     * When `documentSourceId` is provided, only documents belonging to that
-     * source are returned (server-side filter).
+     * Fetch all documents belonging to the configured document source,
+     * handling cursor-based pagination. The `document_source_id` server-side
+     * filter scopes the result to this connector's source only.
      */
-    async listAllDocuments(documentSourceId?: string): Promise<WhalyDocument[]> {
+    async listAllDocuments(): Promise<WhalyDocument[]> {
         const documents: WhalyDocument[] = [];
         let after: string | undefined;
 
         while (true) {
-            const params: Record<string, string> = {};
+            const params: Record<string, string> = { document_source_id: this.documentSourceId };
             if (after) params["after"] = after;
-            if (documentSourceId) params["document_source_id"] = documentSourceId;
 
             const response = await this.axiosClient.get<WhalyPaginatedResponse<WhalyDocument>>(
                 "/v1/documents",
@@ -181,20 +177,27 @@ export class WhalyDocumentService {
         }
     }
 
-    /** Create a new document record. */
-    async createDocument(payload: Omit<WhalyDocument, "id">): Promise<WhalyDocument> {
+    /** Create a new document record, attached to the configured document source. */
+    async createDocument(payload: Omit<WhalyDocument, "id" | "document_source_id">): Promise<WhalyDocument> {
         try {
-            const response = await this.axiosClient.post("/v1/documents", payload);
+            const response = await this.axiosClient.post("/v1/documents", {
+                ...payload,
+                document_source_id: this.documentSourceId,
+            });
             return response.data.data ?? response.data;
         } catch (err) {
             throw enrichAxiosError(err);
         }
     }
 
-    /** Update an existing document record. */
+    /** Update an existing document record, keeping it in the configured document source. */
     async updateDocument(id: string, payload: Partial<WhalyDocument>): Promise<WhalyDocument> {
         try {
-            const response = await this.axiosClient.put(`/v1/documents/${id}`, { id, ...payload });
+            const response = await this.axiosClient.put(`/v1/documents/${id}`, {
+                id,
+                ...payload,
+                document_source_id: this.documentSourceId,
+            });
             return response.data.data ?? response.data;
         } catch (err) {
             throw enrichAxiosError(err);

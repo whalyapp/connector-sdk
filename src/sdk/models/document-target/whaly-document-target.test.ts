@@ -105,7 +105,6 @@ describe("WhalyDocumentTarget", () => {
                 size_kb: 42,
                 storage: "storage-1",
                 metadata: {},
-                document_source_id: "docsrc_existing",
             };
 
             await target.updateDocumentMetadata("doc-1", entry, existingDoc);
@@ -123,7 +122,6 @@ describe("WhalyDocumentTarget", () => {
                 size_kb: 42,
                 storage: "storage-1",
                 metadata: { key: "value" },
-                document_source_id: "docsrc_existing",
             });
         });
     });
@@ -147,69 +145,6 @@ describe("WhalyDocumentTarget", () => {
 
             expect(result).toEqual(docs);
             expect(mockService.listAllDocuments).toHaveBeenCalledTimes(1);
-            expect(mockService.listAllDocuments).toHaveBeenCalledWith();
-        });
-    });
-
-    describe("document source scoping", () => {
-        it("creates new documents in the org default source when unscoped", async () => {
-            mockService.uploadFile.mockResolvedValueOnce({ storage: "gcs", filePath: "s/d.pdf", sizeKb: 1 });
-            mockService.createDocument.mockResolvedValueOnce({ id: "new-1" });
-            const fsMod = await import("fs-extra");
-            vi.spyOn(fsMod.default, "stat").mockResolvedValueOnce({ size: 1024 } as any);
-
-            const entry: DocumentEntry = { externalId: "ext-1", fileName: "t.pdf", originalFileName: "t.pdf", extension: "pdf" };
-            await target.createDocument("stream", entry, "/tmp/t.pdf");
-
-            expect(mockService.createDocument).toHaveBeenCalledWith(
-                expect.objectContaining({ document_source_id: null }),
-            );
-        });
-
-        it("fetches per source and creates in the first source when scoped", async () => {
-            const { WhalyDocumentTarget } = await import("./whaly-document-target");
-            const scoped = new WhalyDocumentTarget({
-                objectStorageId: "objst_test",
-                documentSourceIds: ["docsrc_a", "docsrc_b"],
-            });
-
-            mockService.listAllDocuments
-                .mockResolvedValueOnce([{ id: "1", external_id: "doc-1", document_source_id: "docsrc_a" }])
-                .mockResolvedValueOnce([{ id: "2", external_id: "doc-2", document_source_id: "docsrc_b" }]);
-
-            const result = await scoped.listExistingDocuments();
-
-            expect(result).toHaveLength(2);
-            expect(mockService.listAllDocuments).toHaveBeenCalledTimes(2);
-            expect(mockService.listAllDocuments).toHaveBeenNthCalledWith(1, "docsrc_a");
-            expect(mockService.listAllDocuments).toHaveBeenNthCalledWith(2, "docsrc_b");
-
-            mockService.uploadFile.mockResolvedValueOnce({ storage: "gcs", filePath: "s/d.pdf", sizeKb: 1 });
-            mockService.createDocument.mockResolvedValueOnce({ id: "new-1" });
-            const fsMod = await import("fs-extra");
-            vi.spyOn(fsMod.default, "stat").mockResolvedValueOnce({ size: 1024 } as any);
-
-            const entry: DocumentEntry = { externalId: "ext-1", fileName: "t.pdf", originalFileName: "t.pdf", extension: "pdf" };
-            await scoped.createDocument("stream", entry, "/tmp/t.pdf");
-
-            expect(mockService.createDocument).toHaveBeenCalledWith(
-                expect.objectContaining({ document_source_id: "docsrc_a" }),
-            );
-        });
-
-        it("preserves the document's current source on reupload", async () => {
-            mockService.uploadFile.mockResolvedValueOnce({ storage: "gcs", filePath: "s/d.pdf", sizeKb: 1 });
-            mockService.updateDocument.mockResolvedValueOnce({});
-            const fsMod = await import("fs-extra");
-            vi.spyOn(fsMod.default, "stat").mockResolvedValueOnce({ size: 1024 } as any);
-
-            const entry: DocumentEntry = { externalId: "ext-1", fileName: "t.pdf", originalFileName: "t.pdf", extension: "pdf" };
-            await target.reuploadDocument("stream", "doc-1", entry, "/tmp/t.pdf", "docsrc_b");
-
-            expect(mockService.updateDocument).toHaveBeenCalledWith(
-                "doc-1",
-                expect.objectContaining({ document_source_id: "docsrc_b" }),
-            );
         });
     });
 });

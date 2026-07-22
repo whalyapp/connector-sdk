@@ -13,8 +13,45 @@ import { Schema } from "../schema";
 import Bluebird from "bluebird";
 import { DEFAULT_MAX_CONCURRENT_STREAMS } from "./tap";
 import { getDryRunLimit, isDryRun } from "../../service/dryRun";
+import { optionalEnv } from "../../service/env";
 import { CounterMetric, EXECUTION_TIME_METRIC_NAME, getCounterMetrics, MetricConfiguration, ROWS_SYNCED_METRIC_NAME } from "../../service/metric";
 import { format } from "util";
+
+/**
+ * When the total number of rows is known, the progress log is emitted once per
+ * this many percent of progress (e.g. 10 => logs at 10%, 20%, ... 100%).
+ * Overridable via the PROGRESS_LOG_PERCENT_STEP env var (1-100).
+ */
+const DEFAULT_PROGRESS_LOG_PERCENT_STEP = 10;
+
+/**
+ * Fallback progress log interval (in rows) used when the total number of rows
+ * is unknown and a percentage can't be computed.
+ * Overridable via the PROGRESS_LOG_FALLBACK_INTERVAL env var (> 0).
+ */
+const DEFAULT_PROGRESS_LOG_FALLBACK_INTERVAL = 100_000;
+
+/**
+ * Resolve the progress-log percent step from the environment, falling back to
+ * the default when unset or invalid. Clamped to the 1-100 range.
+ */
+function getProgressLogPercentStep(): number {
+    const raw = optionalEnv("PROGRESS_LOG_PERCENT_STEP", String(DEFAULT_PROGRESS_LOG_PERCENT_STEP));
+    const n = parseInt(raw, 10);
+    if (isNaN(n) || n <= 0) return DEFAULT_PROGRESS_LOG_PERCENT_STEP;
+    return Math.min(n, 100);
+}
+
+/**
+ * Resolve the fallback progress-log interval (in rows) from the environment,
+ * falling back to the default when unset or invalid.
+ */
+function getProgressLogFallbackInterval(): number {
+    const raw = optionalEnv("PROGRESS_LOG_FALLBACK_INTERVAL", String(DEFAULT_PROGRESS_LOG_FALLBACK_INTERVAL));
+    const n = parseInt(raw, 10);
+    if (isNaN(n) || n <= 0) return DEFAULT_PROGRESS_LOG_FALLBACK_INTERVAL;
+    return n;
+}
 
 /**
  * TODO: Handle non timestamp based replication key
@@ -361,6 +398,9 @@ export abstract class Stream<O = any, C = any, P = undefined> {
     // Private sync methods:
     async _syncRecords(parent?: P): Promise<void> {
         let rowsSent = 0;
+        let lastLoggedPercent = 0;
+        const progressPercentStep = getProgressLogPercentStep();
+        const progressFallbackInterval = getProgressLogFallbackInterval();
         const dryRunLimit = isDryRun() ? getDryRunLimit() : undefined;
 
         let recordSyncedMetrics: CounterMetric[] = [];
@@ -418,11 +458,16 @@ export abstract class Stream<O = any, C = any, P = undefined> {
                 break;
             }
 
-            if (rowsSent % 1000 === 0) {
-                const percentStr = this.totalRows
-                    ? ` (${Math.round((rowsSent / this.totalRows) * 100)}%)`
-                    : "";
-                logger.info(`⏳ Stream: ${this.streamId} - ${rowsSent} records synced so far...${percentStr}`);
+            if (this.totalRows) {
+                // Log once per progressPercentStep of progress.
+                const percent = Math.floor((rowsSent / this.totalRows) * 100);
+                if (percent >= lastLoggedPercent + progressPercentStep) {
+                    lastLoggedPercent = percent - (percent % progressPercentStep);
+                    logger.info(`⏳ Stream: ${this.streamId} - ${rowsSent} records synced so far... (${percent}%)`);
+                }
+            } else if (rowsSent % progressFallbackInterval === 0) {
+                // Total unknown: fall back to a coarse fixed interval.
+                logger.info(`⏳ Stream: ${this.streamId} - ${rowsSent} records synced so far...`);
             }
         }
 

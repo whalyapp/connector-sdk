@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.13]
+
+### Changed
+
+- **Progress logging is now percentage-based and configurable.** During a stream sync, the
+  `⏳ ... records synced so far` log was previously emitted every 1000 records, which is very noisy on
+  large files. It now behaves as follows:
+  - When the total number of rows is known (`totalRows` set), the log is emitted once per step of
+    progress (default every 10%), i.e. at most ~10 lines per stream.
+  - When the total is unknown, it falls back to a coarse fixed interval (default every 100,000 records).
+  - Both thresholds are overridable via environment variables:
+    - `PROGRESS_LOG_PERCENT_STEP` (1-100, default `10`)
+    - `PROGRESS_LOG_FALLBACK_INTERVAL` (rows, > 0, default `100000`)
+  - Invalid or unset values fall back to the defaults. This change is backward compatible (no API change).
+
 ## [0.3.12]
 
 ### Added

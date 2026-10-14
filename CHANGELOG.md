@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0]
+
+### Added
+
+- **Input of a Whaly FileUpload run, for jobs fed by email.** A FileUpload job can now receive files from an inbound
+  email: one run per email, carrying every kept attachment.
+  - `getInputFiles()` returns the run's files: `WLY_FILE_URIS` for email runs, `[FILE_URI]` for manual uploads. A
+    transformer written against it handles both. Single-attachment emails also keep working through `FILE_URI`.
+  - `getEmailMetadata()` returns the sender, subject and receive time of the email that started the run.
+  - `getRunTrigger()` returns `MANUAL`, `EMAIL` or `REPLAY`.
+  - `VariableExtractors.emailSubject(regex)` turns named groups of the email subject into variables, for reports
+    whose date only appears in the subject.
+
+### Changed
+
+- `processFileStreams()` wraps a stream failure in `FileProcessingError`, naming the file and stream that failed. The
+  original error is kept as `cause`.
+
 ## [0.3.13]
 
 ### Changed

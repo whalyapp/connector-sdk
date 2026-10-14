@@ -12,6 +12,7 @@ export * from "./sdk/service/cdnId";
 export * from "./sdk/service/env";
 export * from "./sdk/service/concurrency";
 export * from "./sdk/service/mime";
+export * from "./sdk/service/runInput";
 
 export * from "./sdk/models/replication";
 export * from "./sdk/models/error";

@@ -1,3 +1,5 @@
+import { getEmailMetadata } from "../service/runInput";
+
 /**
  * Variable extraction utilities for common filename patterns.
  */
@@ -18,6 +20,17 @@ export class VariableExtractors {
         return (filename: string) => {
             const match = filename.match(pattern);
             return match?.groups ?? {};
+        };
+    }
+
+    /**
+     * Extracts named capture groups from the subject of the email that started the run, for
+     * scheduled reports whose date only appears in the subject. Empty for manual uploads.
+     */
+    static emailSubject(pattern: RegExp): (filename: string) => { [key: string]: string | undefined } {
+        return () => {
+            const subject = getEmailMetadata()?.subject;
+            return subject ? subject.match(pattern)?.groups ?? {} : {};
         };
     }
 

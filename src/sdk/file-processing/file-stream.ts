@@ -216,7 +216,27 @@ export async function processFileStreams(
 ): Promise<void> {
     for (const entry of entries) {
         const stream = new FileStream(entry.config, entry.filePath, tapState, target);
-        await stream.sync();
+        try {
+            await stream.sync();
+        } catch (err) {
+            throw new FileProcessingError(entry.filePath, entry.config.streamId, err);
+        }
     }
     await target.complete();
+}
+
+/**
+ * A run can process several files (one email, several attachments): says which one failed,
+ * so the run's error is not just "the run failed".
+ */
+export class FileProcessingError extends Error {
+    constructor(
+        readonly filePath: string | string[],
+        readonly streamId: string,
+        override readonly cause: unknown,
+    ) {
+        const files = Array.isArray(filePath) ? filePath.join(", ") : filePath;
+        super(`Processing ${files} (stream ${streamId}) failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+        this.name = "FileProcessingError";
+    }
 }

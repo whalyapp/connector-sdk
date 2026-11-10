@@ -62,6 +62,7 @@ export * from "./services/cloud-storage";
 export * from "./services/local-storage";
 export * from "./services/zip";
 export * from "./services/cdn";
+export * from "./services/whaly-export";
 
 /**
  * Asset Tap / Target (file-level pipeline)

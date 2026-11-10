@@ -24,6 +24,7 @@ It supports two main connector types:
 | `FileStream` / `FileTap` | Stream and Tap implementations for file-based data sources |
 | `CloudStorageService` | Google Cloud Storage client with marker-file tracking |
 | `SftpClient` | SFTP client for remote file access |
+| `WhalyExportService` | Client of the Whaly exports API: run an export and stream its rows ([guide](./docs/whaly-exports.md)) |
 | `BigQueryTarget` | BigQuery target implementation |
 | `GCSStateProvider` | State management backed by GCS |
 
@@ -84,6 +85,7 @@ for (const filePath of files) {
 |---|---|
 | [API Reference](./docs/api-reference.md) | Building API connectors (RESTStream, Tap, Auth), core types, and full reference |
 | [File Processing Guide](./docs/file-processing.md) | Excel & CSV import, services (GCS, SFTP, ZIP), full examples |
+| [Whaly Exports](./docs/whaly-exports.md) | Read Whaly exports (`/v1/exports`) from a connector |
 | [Changelog](./CHANGELOG.md) | Release history |
 | [Migration Guide](./MIGRATION.md) | Upgrade instructions between versions |
 

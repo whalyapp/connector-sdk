@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0]
+
+### Added
+
+- **`WhalyExportService`, a client of the Whaly public exports API (`/v1/exports`).** A connector can now read the
+  data of a Whaly export (an output schema over an object, granted to a service account) instead of querying the
+  warehouse.
+  - `listExports()`, `getExport(id)`: the exports granted to the key, their columns and last successful run.
+  - `runAndWait(id)` starts a run (or joins the one in flight) and polls until it succeeds; `startRun`, `waitForRun`,
+    `getRun`, `listRuns`, `getLatestSucceededRun` and `cancelRun` are available on their own.
+  - `streamRows(id, runId)` streams the rows of every part (gzip JSON lines), re-reading the run before each part so
+    its signed URL (valid 15 minutes) is fresh, and checks each part's row count. `fetchAllRows(id)` collects a small
+    export in memory.
+  - A failed, cancelled, expired or timed-out run throws `WhalyExportRunError`, carrying the run.
+  - Uses `WLY_API_ENDPOINT` and `WLY_SERVICE_ACCOUNT_KEY` by default, like `WhalyDocumentService`; transient errors
+    (no response, 429, 5xx) are retried.
+
 ## [0.4.0]
 
 ### Added

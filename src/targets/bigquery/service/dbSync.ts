@@ -369,7 +369,7 @@ export class BigQueryDBSync extends StreamWarehouseSyncService {
         }
     }
 
-    loadStreamInStagingArea = async (localFilePath: string) => {
+    loadStreamInStagingArea = async (localFilePath: string, opts?: { append?: boolean }) => {
 
         try {
 
@@ -382,7 +382,8 @@ export class BigQueryDBSync extends StreamWarehouseSyncService {
 
             const metadata: JobLoadMetadata = {
                 sourceFormat: 'NEWLINE_DELIMITED_JSON',
-                writeDisposition: "WRITE_TRUNCATE",
+                // Appending is safe: any schema change commits the staged rows first (see ITarget.schema)
+                writeDisposition: opts?.append ? "WRITE_APPEND" : "WRITE_TRUNCATE",
             };
 
             await this.loadGCSFileInTable(this.sqlStagingTableId, file, metadata);

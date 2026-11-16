@@ -278,17 +278,18 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
             } else {
                 // Load the previous batched data as there can be schema changes
                 const prevStreamState = this.streams[streamId];
-                if (prevStreamState.batchedRowCount > 0) {
+                if (prevStreamState.batchedRowCount > 0 || prevStreamState.hasPendingStagedRows()) {
                     const prevSchema = prevStreamState.getSchema();
                     if(prevSchema) {
                         // Flatten the new schema to compare with the previous one
                         const newFlattenedSchema = flattenSchema(streamId, message.schema);
                         // Check if schema changes are breaking or non-breaking
                         const { hasBreakingChanges, changes } = this.analyzeSchemaChanges(prevSchema, newFlattenedSchema, streamId);
-                        if (hasBreakingChanges) {
-                            logger.info(`🔥 StreamId=${streamId} - Detected BREAKING schema changes: ${changes.join(', ')}. Loading batched records before applying new schema.`);
+                        if (hasBreakingChanges || (prevStreamState.hasPendingStagedRows() && changes.length > 0)) {
+                            // Rows waiting in a staging table are committed too: that table has the previous schema
+                            logger.info(`🔥 StreamId=${streamId} - Detected ${hasBreakingChanges ? "BREAKING" : "NON-BREAKING"} schema changes${hasBreakingChanges ? "" : " on a stream with staged rows"}: ${changes.join(', ')}. Loading batched records before applying new schema.`);
                             if (!isDryRun()) {
-                                await ITarget.uploadSingleStreamToWarehouse(prevStreamState);
+                                await ITarget.uploadSingleStreamToWarehouse(prevStreamState, { commit: true });
                             }
                         } else {
                             logger.info(`✅ StreamId=${streamId} - Detected NON-BREAKING schema changes: ${changes.join(', ')}. Continuing without uploading batched records.`);
@@ -469,11 +470,20 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
                 if (!isFinalLoad && s.getReplicationMethod() === "FULL_TABLE") {
                     return false;
                 }
-                return s.getBatchedRowCount() > 0
+                // On the final load, APPEND streams with staged rows must be committed even if no row is left in the local file
+                return s.getBatchedRowCount() > 0 || (isFinalLoad && s.hasPendingStagedRows())
             });
 
         if (streamsWithRemainingRecords.length > 0) {
-            this.flushedState = await this.uploadStreamsToWarehouse(streamsWithRemainingRecords)
+            this.flushedState = await this.uploadStreamsToWarehouse(streamsWithRemainingRecords, { commit: isFinalLoad })
+        }
+
+        // Rows still in a staging table are not in the destination yet: checkpointing the state now would
+        // lose them if the sync crashed before the final load (the staging table is dropped on the next run)
+        const hasUncommittedRows = Object.values(this.streams).some(s => !!s && s.hasPendingStagedRows());
+        if (hasUncommittedRows) {
+            logger.info(`⏸️ Some APPEND streams have rows waiting in their staging table, the state will be saved after the final load.`)
+            return;
         }
 
         if (Object.keys(this.flushedState).length > 0) {
@@ -490,7 +500,8 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
     }
 
     private uploadStreamsToWarehouse = async (
-        streamsToUpload: string[]
+        streamsToUpload: string[],
+        opts: { commit: boolean }
     ) => {
 
         try {
@@ -498,7 +509,7 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
                 logger.info(`📤 Upload stream: ${streamId} to Warehouse`)
                 const streamState = this.streams[streamId];
                 if (streamState) {
-                    await ITarget.uploadSingleStreamToWarehouse(streamState)
+                    await ITarget.uploadSingleStreamToWarehouse(streamState, opts)
                 }
             }, { concurrency: 3 });
 
@@ -524,8 +535,16 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
         }
     }
 
+    /**
+     * Load the rows batched in the local file into the warehouse.
+     *
+     * `commit: false` (intermediate flush): an APPEND stream only adds its rows to the staging table, which keeps
+     * growing until the commit. The destination then receives the whole sync in one INSERT, so a reader can never
+     * see half of it. Other replication methods are merged into the destination at each flush, as before.
+     */
     static uploadSingleStreamToWarehouse = async (
-        streamState: StreamState
+        streamState: StreamState,
+        opts: { commit: boolean } = { commit: true }
     ) => {
 
         const dbSync = streamState.getDbSync();
@@ -533,15 +552,31 @@ export abstract class ITarget<C extends BaseConfig = BaseConfig> {
         try {
             const replicationMethod = streamState.getReplicationMethod();
             const fileToLoad = streamState.getFileToLoad();
+            const batchedRowCount = streamState.getBatchedRowCount();
+            const hasPendingStagedRows = streamState.hasPendingStagedRows();
+            const deferCommit = !opts.commit && replicationMethod === "APPEND";
 
-            logger.info(`StreamId=${dbSync.streamId} - Uploading ${streamState.getBatchedRowCount()} rows from ${fileToLoad.path}`);
+            if (batchedRowCount > 0) {
+                logger.info(`StreamId=${dbSync.streamId} - Uploading ${batchedRowCount} rows from ${fileToLoad.path}${hasPendingStagedRows ? " (added to the rows already staged)" : ""}`);
+                if (!hasPendingStagedRows) {
+                    await dbSync.createStagingArea();
+                }
+                await dbSync.loadStreamInStagingArea(fileToLoad.path, { append: hasPendingStagedRows });
+            }
 
-            await dbSync.createStagingArea();
-            await dbSync.loadStreamInStagingArea(fileToLoad.path);
-            await dbSync.mergeTempTableWithDestination(replicationMethod);
-            await dbSync.deleteStagingArea();
-            streamState.setHasBeenLoadedYet();
-            streamState.resetFileToLoad();
+            if (deferCommit) {
+                streamState.setHasPendingStagedRows(true);
+                logger.info(`StreamId=${dbSync.streamId} - Rows kept in the staging table, they will be copied to the destination at the end of the sync`);
+            } else {
+                await dbSync.mergeTempTableWithDestination(replicationMethod);
+                await dbSync.deleteStagingArea();
+                streamState.setHasPendingStagedRows(false);
+                streamState.setHasBeenLoadedYet();
+            }
+            // With no batched row the local file was never written (nor created on disk): nothing to reset
+            if (batchedRowCount > 0) {
+                streamState.resetFileToLoad();
+            }
         } catch (err) {
             if (err instanceof Error) {
                 logger.error(`StreamId=${dbSync.streamId} - Couldn't upload stream due to an error: %s`, err.message);

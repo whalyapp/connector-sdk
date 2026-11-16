@@ -61,7 +61,8 @@ export abstract class StreamWarehouseSyncService {
 
     // Functions to deal with the staging area that will be used to load data in the Warehouse
     abstract createStagingArea: () => Promise<void>;
-    abstract loadStreamInStagingArea: (localFilePath: string) => Promise<void>;
+    // `append: true` adds the file to the rows already in the staging area instead of replacing them
+    abstract loadStreamInStagingArea: (localFilePath: string, opts?: { append?: boolean }) => Promise<void>;
     abstract deleteStagingArea: () => Promise<void>;
 
     // Function to read from the Warehouse

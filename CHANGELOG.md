@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **An APPEND sync is now written to the destination table in one go.** Above 1,000,000 batched rows the target
+  flushes its streams; each flush used to INSERT its batch into the destination table, so a sync of several million
+  rows was visible half-written for the whole loading time, every row carrying the same `_wly_synced_at`. A model
+  reading `max(_wly_synced_at)` then saw a partial snapshot, without any error. Intermediate batches of APPEND streams
+  now pile up in the `<table>_temp` staging table (`WRITE_APPEND`), and the destination receives the whole sync in a
+  single `INSERT … SELECT` at the final load. INCREMENTAL, LOG_BASED and FULL_TABLE streams are unchanged.
+  - While rows wait in a staging table, intermediate flushes no longer save the state: it is saved after the final
+    load, so a crash cannot checkpoint rows that never reached the destination.
+  - A schema change on a stream with staged rows commits them first, the staging table having the previous schema.
+  - `StreamWarehouseSyncService.loadStreamInStagingArea` takes an optional `{ append }` argument (custom targets must
+    accept it).
+
 ## [0.4.0]
 
 ### Added

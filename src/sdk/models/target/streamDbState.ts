@@ -29,6 +29,11 @@ export class StreamState {
     // So we need to keep track of whether we are at the first load or not
     _hasBeenLoadedYetDuringThisSync: boolean
 
+    // APPEND streams: intermediate batches are piled up in the staging table and only copied to the
+    // destination table at the end of the sync (one INSERT), so that a reader never sees a partial sync.
+    // True while the staging table holds rows that are not yet in the destination table.
+    _hasPendingStagedRows: boolean
+
     replicationMethod: ReplicationMethod
 
     // Pre-compiled ajv ValidateFunction — compiled once per schema, reused for every row
@@ -53,6 +58,7 @@ export class StreamState {
         this.batchDate = dayjs();
         this.replicationMethod = replicationMethod;
         this._hasBeenLoadedYetDuringThisSync = false;
+        this._hasPendingStagedRows = false;
     }
 
     setSchema(schema: FlattenedSchema) {
@@ -119,5 +125,13 @@ export class StreamState {
 
     setHasBeenLoadedYet() {
         this._hasBeenLoadedYetDuringThisSync = true;
+    }
+
+    hasPendingStagedRows(): boolean {
+        return this._hasPendingStagedRows;
+    }
+
+    setHasPendingStagedRows(value: boolean) {
+        this._hasPendingStagedRows = value;
     }
 }
